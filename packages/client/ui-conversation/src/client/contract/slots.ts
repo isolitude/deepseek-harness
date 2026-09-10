@@ -131,6 +131,14 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
       scope: 'session'
       owner: { view?: string }
     }
+    /**
+     * Compact self-contained transcript + composer a host mounts inside its own
+     * surface (e.g. an agent drawer) with the target Session already current.
+     * The occupant renders a plain text transcript only (no tool-call/markdown/
+     * image rendering — ChatView owns those node slots) and drives the real
+     * per-Session input machine, so it is a bounded, non-authoritative view.
+     */
+    'conversation.embedded': { kind: 'single'; scope: 'session' }
     /** Strict per-Session title, actions, and View navigation. */
     'conversation.session.header': { kind: 'single'; scope: 'session' }
     /** Optional replacement for one Session breadcrumb title. */

@@ -21,6 +21,7 @@
 
 import { posix, win32 } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
+import type { Agent } from '@deepseek-ai/dsh-agent'
 import z from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-fs'
 import type { FsDirEntry, FsInfo, FsPathInfo, FsTarget } from '@deepseek-ai/dsh-fs'
@@ -39,6 +40,8 @@ import type {
   WorkspaceFileStat,
   WorkspaceFileText,
   WorkspaceFileWatchFrame,
+  WorkspaceFileWrite,
+  WorkspaceFileWriteRequest,
 } from './types.ts'
 
 export type * from './types.ts'
@@ -365,6 +368,43 @@ export class WorkspaceFiles extends TypertRemoteService {
     return this.feed.follow(workspaceFileScope.workspaceRoot, signal)
   }
 
+  /**
+   * Atomically create or replace a whole UTF-8 text file inside the Agent's
+   * workspace, creating any missing parent directories. The write is fenced by
+   * the session's sandbox policy (the same confinement the model-facing `write`
+   * tool gets) and confined to the workspace root; a `read-only` session is
+   * refused with `workspace-file/write-denied`. Used by the workbench to persist
+   * per-analysis settings beside the analysis.
+   * @param agent - target Agent resolved from the Session identity on the wire.
+   * @param request - the workspace path and full new content.
+   * @param signal - caller cancellation.
+   * @returns the written file's identity, version, and create/update operation.
+   */
+  @Remote
+  async write(agent: Agent, request: WorkspaceFileWriteRequest, signal: AbortSignal): Promise<WorkspaceFileWrite> {
+    if (request.path.length === 0) {
+      throw new RemoteError('gateway/bad-request', 'path is required', {})
+    }
+    const workspaceRoot = this.workspaceRootOf(agent)
+    const root = await this.ctx.fs.resolve(workspaceRoot, { signal })
+    const target = await this.confine(root, workspaceRoot, request.path, signal)
+    const policy = this.ctx.sandboxPolicy.resolve({ session: agent.session })
+    try {
+      const outcome = await this.ctx.fs.writeText(target, request.content, undefined, signal, policy)
+      return { ...this.statOf(target, { version: outcome.version, type: 'file' as const }), operation: outcome.operation }
+    } catch (error: unknown) {
+      if (isSandboxDenial(error)) {
+        throw new RemoteError('workspace-file/write-denied', `"${request.path}" write is denied by the sandbox`, { path: request.path }, { cause: error })
+      }
+      throw error
+    }
+  }
+
+  /** The workspace root an Agent writes under: its session header's cwd, or the deployment default. */
+  private workspaceRootOf(agent: Agent): string {
+    return agent.session.header.cwd ?? this.ctx.sandboxPolicy.workspaceRoot
+  }
+
   /** Apply the page defaults and caps here, so the request never carries them implicitly. */
   private resolvePage(range: WorkspaceFileRange): { offset: number; limit: number } {
     const offset = range.offset === undefined ? 1 : integerAtLeast(range.offset, 1, 'offset')
@@ -473,6 +513,11 @@ export class WorkspaceFiles extends TypertRemoteService {
  */
 function isNotTextRefusal(error: unknown): boolean {
   return typeof error === 'object' && error !== null && 'code' in error && error.code === 'FS_NOT_TEXT'
+}
+
+/** The sandboxing backend's write refusal, recognized by its code alone (same class-boundary rule as `isNotTextRefusal`). */
+function isSandboxDenial(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && 'code' in error && error.code === 'FS_SANDBOX_DENIED'
 }
 
 export default WorkspaceFiles

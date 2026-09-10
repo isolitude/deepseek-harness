@@ -12,7 +12,9 @@ import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
+import type { Agent } from '@deepseek-ai/dsh-agent'
 import { LocalFileSystem } from '@deepseek-ai/dsh-fs-local'
+import { Session, SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session'
 import { SessionId } from '@deepseek-ai/dsh-session/types'
 import { remoteErrorOf } from '@deepseek-ai/dsh-typert-protocol'
 import { WorkspaceFiles, type Config, type WorkspaceFileScope } from '../src/index.ts'
@@ -30,6 +32,11 @@ export interface Harness {
   readonly outside: string
   readonly ctx: Context
   readonly scope: WorkspaceFileScope
+  /**
+   * A live Agent handle whose session header carries no cwd, so the sandbox
+   * policy's workspace root governs — the `write` endpoints' target.
+   */
+  readonly agent: Agent
   /**
    * The service under test, at the given caps. One per test: the service key is
    * global to the Context, so a second call with caps is a defect in the test.
@@ -62,6 +69,12 @@ export async function openWorkspace(prefix: string): Promise<Harness> {
     outside,
     ctx,
     scope: fileScope(workspace),
+    agent: { session: Session.create(SessionId('s-test'), undefined, {
+      version: SESSION_FORMAT_VERSION,
+      id: SessionId('s-test'),
+      createdAt: 0,
+      isSeeded: false,
+    }) } as unknown as Agent,
     endpoint: (caps) => {
       if (service !== undefined) {
         if (caps !== undefined) throw new Error('the harness serves one WorkspaceFiles per test; hoist the endpoint')

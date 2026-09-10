@@ -114,6 +114,20 @@ export interface WorkspaceDirectoryListing {
   readonly truncated: boolean
 }
 
+/** The requested whole-file write: a workspace-relative path and UTF-8 content. */
+export interface WorkspaceFileWriteRequest {
+  /** Workspace path, absolute or relative to the workspace root. */
+  readonly path: string
+  /** The full new file content. Missing parent directories are created. */
+  readonly content: string
+}
+
+/** The outcome of one whole-file write. */
+export interface WorkspaceFileWrite extends WorkspaceFileStat {
+  /** Whether the write created a new file or replaced an existing one. */
+  readonly operation: 'create' | 'update'
+}
+
 /**
  * One observation of a workspace file made by an instrumented filesystem
  * operation. Frames report observations, not deltas: a consumer already
@@ -162,5 +176,7 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
       readonly path: string
       readonly kind: 'file' | 'symlink' | 'other'
     }
+    /** The write was refused by the sandbox policy (e.g. a read-only session). */
+    'workspace-file/write-denied': { readonly path: string }
   }
 }

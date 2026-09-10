@@ -1,0 +1,41 @@
+.dag {
+  display: block;
+  max-width: 100%;
+  overflow: auto;
+  font-family: var(--dsw-alias-label-primary-foreground, ui-sans-serif, system-ui, sans-serif);
+}
+
+.node {
+  fill: var(--dsw-alias-bg-base, #fff);
+  stroke-width: 1.5;
+  transition: filter 120ms ease;
+}
+
+.node:hover {
+  filter: brightness(0.97);
+}
+
+.dot {
+  stroke: none;
+}
+
+.label {
+  fill: var(--dsw-alias-label-primary, #111827);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.kind {
+  fill: var(--dsw-alias-label-secondary, #6b7280);
+  font-size: 10px;
+}
+
+.edge {
+  fill: none;
+  stroke: var(--dsw-alias-border-inverted, #9ca3af);
+  stroke-width: 1.5;
+}
+
+.arrow {
+  fill: var(--dsw-alias-border-inverted, #9ca3af);
+}

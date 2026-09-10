@@ -50,6 +50,12 @@ allowBuilds:
   electron-winstaller: false
   # Store-index rewriting only needs msgpackr's portable JavaScript codec.
   msgpackr-extract: false
+  # ssh2's optional native accelerator: without the compiled binding, large
+  # SFTP payloads can crash inside the AES-GCM decrypt path.
+  cpu-features: true
+  # ssh2's own install script compiles the binding that uses cpu-features;
+  # denying it would leave the un-accelerated path active.
+  ssh2: true
 
 minimumReleaseAgeExclude:
   # Office engines and their API are qualified and released together by the kit repository.

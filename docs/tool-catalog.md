@@ -30,6 +30,7 @@ This table connects model-visible tool names to the plugin package and service s
 | `@deepseek-ai/dsh-tool-str-replace-editor` | `str_replace_editor` | `ctx.tools`, `ctx.fs` | `tool/call`, `fs/observed after view presence/absence, edit absence, or successful mutation`, `tool/result` | - | Standalone view/create/unique literal replace/line insert tool over the filesystem seam; it composes with any shell or terminal API. |
 | `@deepseek-ai/dsh-tool-fs` | `edit`, `read`, `read_image`, `write` | `ctx.tools`, `ctx.fs`, `ctx.systemPrompt`, `ctx.attachments (image-tool registration)`, `ctx.llm + an image-capable route (image-tool execution)` | `tool/call`, `fs/write-intent or fs/edit-intent for mutations`, `fs/observed after read presence/absence or successful file operation`, `durable attachment (read_image)`, `tool/result` | - | The read-before-write/edit policy is added by `@deepseek-ai/dsh-fs-observation-policy` (an `fs/*` event-gate plugin, no schema change); a deployment that loads these tools is expected to also load it. The image tool is not registered without `ctx.attachments`; its schema is route-independent, and execution refuses unless the exact routed model declares image input. |
 | `@deepseek-ai/dsh-tool-fs-search` | `glob`, `grep` | `ctx.tools`, `ctx.subprocess`, `ctx.systemPrompt` | `tool/call`, `tool/result` | - | glob and grep are unconditional discovery tools that spawn the packaged ripgrep binary (`@vscode/ripgrep`) through ctx.subprocess as ordinary foreground calls (never background jobs) — no host `rg` install and no shell layer. The catalog uses `sampleOverCapGlobResults: true`; deployments must choose that behavior explicitly. Capped results save the complete formatted list through the optional ctx.spillStore backend; returned locators are follow-up-readable/searchable when the backend exposes local paths in co-located deployments. |
+| `@deepseek-ai/dsh-tool-remote` | `remote_edit`, `remote_exec`, `remote_pull`, `remote_push`, `remote_read`, `remote_write` | `ctx.tools`, `ctx.remote`, `ctx.systemPrompt`, `ctx.credentials at call time when a password/passphrase ref is configured` | `tool/call`, `tool/result` | - | The remote_* tools are the model-facing consumers of the remote-execution seam (ctx.remote). Each call resolves the calling session's nearest .dsh/config.yml until a `remote:` block appears, materializes auth inside the tool boundary, and delegates to the mounted provider (dsh-remote-ssh2); a missing configuration fails loud. Push/pull refuse overwrites by default. |
 | `@deepseek-ai/dsh-tool-terminal` | `terminal_close`, `terminal_list`, `terminal_open`, `terminal_read`, `terminal_send`, `terminal_signal` | `ctx.tools`, `ctx.terminals`, `ctx.systemPrompt`, `ctx.jobs at call time for run_in_background` | `tool/call`, `tool/result` | - | The six terminal tools are opt-in and complement one-shot shell/filesystem tools. `terminal_send(run_in_background: true)` registers with `ctx.jobs`; TUI, named key sequences, BEL, resize, auto-start, and cross-agent sharing are absent from the schema. |
 | `@deepseek-ai/dsh-tool-goal` | `create_goal`, `get_goal`, `update_goal` | `ctx.tools`, `ctx.agents`, `ctx.goals`, `ctx.systemPrompt`, `a calling Agent in an authorized open turn` | `tool/call`, `goal/change for mutations`, `tool/result` | - | create, edit, pause, and resume require direct-human root authority; complete and blocked also accept the exact current goal round. The default blocked lower bound is three admitted rounds. |
 | `@deepseek-ai/dsh-schedule` | `schedule_create`, `schedule_delete`, `schedule_list` | `ctx.tools`, `ctx.sessions`, `Session persistence`, `a future live root Agent` | `tool/call`, `schedule/change create or delete`, `tool/result` | - | Registered only inside live root Agent scopes created after the opt-in Schedule plugin loads. Version 1 accepts after_seconds, explicit absolute at, and bounded fixed-rate every_seconds, and discloses session-local delivery; management reads and mutations require the shared Session persistence barrier. |
@@ -1101,6 +1102,191 @@ Search file contents with a ripgrep regular expression. Returns matching lines w
 Source: [`packages/fs/tool-fs-search/src/index.ts`](../packages/fs/tool-fs-search/src/index.ts)
 
 glob and grep are unconditional discovery tools that spawn the packaged ripgrep binary (`@vscode/ripgrep`) through ctx.subprocess as ordinary foreground calls (never background jobs) — no host `rg` install and no shell layer. The catalog uses `sampleOverCapGlobResults: true`; deployments must choose that behavior explicitly. Capped results save the complete formatted list through the optional ctx.spillStore backend; returned locators are follow-up-readable/searchable when the backend exposes local paths in co-located deployments.
+
+<a id="deepseek-aidsh-tool-remote"></a>
+
+## `@deepseek-ai/dsh-tool-remote`
+
+### `remote_edit`
+
+Apply one literal text replacement to an existing UTF-8 file on the remote server. By default old_string must appear exactly once; set replace_all to replace every occurrence.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "path": {
+      "type": "string",
+      "description": "Remote file path; relative paths resolve against the analysis remoteRoot."
+    },
+    "old_string": {
+      "type": "string",
+      "description": "Literal text to replace."
+    },
+    "new_string": {
+      "type": "string",
+      "description": "Replacement text."
+    },
+    "replace_all": {
+      "type": "boolean",
+      "description": "Replace every occurrence instead of requiring exactly one."
+    }
+  },
+  "required": [
+    "path",
+    "old_string",
+    "new_string"
+  ]
+}
+```
+
+Source: [`packages/remote/tool-remote/src/index.ts`](../packages/remote/tool-remote/src/index.ts)
+
+### `remote_exec`
+
+Run a shell command on the remote server configured for this analysis. Returns bounded stdout/stderr and the remote exit code; a non-zero exit is a reported result, not a failure.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "command": {
+      "type": "string",
+      "description": "The shell command to execute on the remote server."
+    },
+    "workdir": {
+      "type": "string",
+      "description": "Remote working directory. Defaults to the analysis remoteRoot."
+    },
+    "timeout_ms": {
+      "type": "number",
+      "description": "Timeout in milliseconds. The tool applies its configured default and kills the command on expiry."
+    }
+  },
+  "required": [
+    "command"
+  ]
+}
+```
+
+Source: [`packages/remote/tool-remote/src/index.ts`](../packages/remote/tool-remote/src/index.ts)
+
+### `remote_pull`
+
+Download one remote file to the local session workspace (SFTP). Refuses to overwrite an existing local file unless overwrite is true.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "remote_path": {
+      "type": "string",
+      "description": "Remote source path; relative paths resolve against the analysis remoteRoot."
+    },
+    "local_path": {
+      "type": "string",
+      "description": "Local destination path, relative to the session workspace."
+    },
+    "overwrite": {
+      "type": "boolean",
+      "description": "Replace an existing local file. Defaults to false."
+    }
+  },
+  "required": [
+    "remote_path",
+    "local_path"
+  ]
+}
+```
+
+Source: [`packages/remote/tool-remote/src/index.ts`](../packages/remote/tool-remote/src/index.ts)
+
+### `remote_push`
+
+Upload one local file to the remote server (SFTP). Refuses to overwrite an existing remote file unless overwrite is true.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "local_path": {
+      "type": "string",
+      "description": "Local source path, relative to the session workspace."
+    },
+    "remote_path": {
+      "type": "string",
+      "description": "Remote destination path; relative paths resolve against the analysis remoteRoot."
+    },
+    "overwrite": {
+      "type": "boolean",
+      "description": "Replace an existing remote file. Defaults to false."
+    }
+  },
+  "required": [
+    "local_path",
+    "remote_path"
+  ]
+}
+```
+
+Source: [`packages/remote/tool-remote/src/index.ts`](../packages/remote/tool-remote/src/index.ts)
+
+### `remote_read`
+
+Read a text file on the remote server with line numbers. Use offset and limit to page through large files.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "path": {
+      "type": "string",
+      "description": "Remote file path; relative paths resolve against the analysis remoteRoot."
+    },
+    "offset": {
+      "type": "number",
+      "description": "1-based first line of the window. Defaults to 1."
+    },
+    "limit": {
+      "type": "number",
+      "description": "Maximum lines returned. Defaults to and caps at 2000."
+    }
+  },
+  "required": [
+    "path"
+  ]
+}
+```
+
+Source: [`packages/remote/tool-remote/src/index.ts`](../packages/remote/tool-remote/src/index.ts)
+
+### `remote_write`
+
+Create or fully replace a UTF-8 text file on the remote server. The write is atomic; a failed write leaves no partial file.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "path": {
+      "type": "string",
+      "description": "Remote file path; relative paths resolve against the analysis remoteRoot."
+    },
+    "content": {
+      "type": "string",
+      "description": "Complete new file content."
+    }
+  },
+  "required": [
+    "path",
+    "content"
+  ]
+}
+```
+
+Source: [`packages/remote/tool-remote/src/index.ts`](../packages/remote/tool-remote/src/index.ts)
+
+The remote_* tools are the model-facing consumers of the remote-execution seam (ctx.remote). Each call resolves the calling session's nearest .dsh/config.yml until a `remote:` block appears, materializes auth inside the tool boundary, and delegates to the mounted provider (dsh-remote-ssh2); a missing configuration fails loud. Push/pull refuse overwrites by default.
 
 <a id="deepseek-aidsh-tool-terminal"></a>
 

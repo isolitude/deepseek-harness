@@ -165,6 +165,20 @@ export type ChatViewSlotProps =
   & InjectFace<ChatViewInjected>
   & PropsLocale<'chat'>
 
+/** Per-key reader injected into the embedded compact conversation. */
+export interface EmbeddedConversationInjected {
+  keyedHooks: {
+    /** Resolve the stable source for one Chat Node key (live streaming). */
+    chatNode: (key: string) => ChatNodeSource
+  }
+}
+
+/** Full props of the bounded embedded conversation surface. */
+export type EmbeddedConversationProps =
+  PropsRuntime<'conversation.embedded'>
+  & InjectFace<EmbeddedConversationInjected>
+  & PropsLocale<'chat'>
+
 /** Full props of the durable-message image renderer. */
 export type MessageImagesProps = PropsRuntime<'conversation.message.images'> & PropsLocale<'conversation'>
 

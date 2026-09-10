@@ -289,6 +289,16 @@
     - id: ui-cordis
       name: '@deepseek-ai/dsh-client-ui-cordis'
 
+    # The LLMPWA workbench: a left-Sidebar action opening a full-frame panel to
+    # pick an analysis and preview its pipeline DAG from the exported snapshot.
+    - id: ui-llmpwa-pipeline
+      name: '@deepseek-ai/dsh-client-ui-llmpwa-pipeline'
+
+    # Durable workflow lifecycle as an independent Chat node after the
+    # existing generic workflow tool row.
+    - id: ui-workflow-run
+      name: '@deepseek-ai/dsh-client-ui-workflow-run'
+
     # Turn tail: the changed-files card and delivery cards under each closing
     # assistant message. Remove this entry to turn the surface off; the tail
     # hole renders empty.

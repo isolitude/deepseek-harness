@@ -8,6 +8,7 @@ lib/
 *.tsbuildinfo
 pnpm-debug.log
 .pnpm-store/
+.pnpm-home/
 .cache/
 examples/*/*.jsonl
 .storages/
@@ -47,3 +48,7 @@ worktrees/
 .agents/worktrees/
 .typert-*/
 native/system/test/bin/
+
+# The nested LLMPWA project is a separate embedded git repo (its own history);
+# it is not part of this workspace and must not be added as a submodule.
+LLMPWA/

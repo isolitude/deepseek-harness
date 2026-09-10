@@ -63,6 +63,7 @@ async function bench() {
   await runtime.root.declare({
     'main': { kind: 'keyed', scope: 'root' },
     'conversation.approval.detail': { kind: 'single', scope: 'session' },
+    'conversation.embedded': { kind: 'single', scope: 'session' },
     'settings.general.item': { kind: 'list', scope: 'root' },
   }, (_props: { renderSlot?: unknown }) => null)
   const conversation = await runtime.mount({
@@ -92,6 +93,42 @@ describe('Chat apply wiring', () => {
       .toEqual(['stats'])
     expect(b.runtime.slots.entries('settings.general.item').map(row => row.options.id))
       .toEqual(['transcript-view', 'composer-enter'])
+    expect(b.runtime.slots.entries('conversation.embedded').map(row => row.options.id))
+      .toEqual([undefined])
+    await b.runtime.dispose()
+  })
+
+  it('wires the embedded conversation to the per-session Chat node source', async () => {
+    const b = await bench()
+    await b.runtime.sessions.add({ id: SID }, { current: true })
+    const row = b.runtime.slots.entries('conversation.embedded')[0]
+    if (row === undefined) throw new Error('embedded conversation entry is missing')
+    const face = (row.inject as unknown as (sessionId: SessionId) => {
+      keyedHooks: { chatNode: (key: string) => { subscribe: unknown } }
+    })(SID as SessionId)
+    expect(typeof face.keyedHooks.chatNode('node-1').subscribe).toBe('function')
+    await b.runtime.dispose()
+  })
+
+  it('refuses the embedded conversation inject for an unknown session', async () => {
+    const b = await bench()
+    const row = b.runtime.slots.entries('conversation.embedded')[0]
+    if (row === undefined) throw new Error('embedded conversation entry is missing')
+    const inject = (row.inject as unknown as (sessionId: SessionId) => unknown)
+    expect(() => inject('missing' as SessionId)).toThrow(/unknown session/)
+    await b.runtime.dispose()
+  })
+
+  it('exposes Chat node and node-process sources through the Chat view inject', async () => {
+    const b = await bench()
+    await b.runtime.sessions.add({ id: SID }, { current: true })
+    const row = b.runtime.slots.entries('conversation.view')[0]
+    if (row === undefined) throw new Error('Chat view entry is missing')
+    const face = (row.inject as unknown as (sessionId: SessionId) => {
+      keyedHooks: { chatNode: (key: string) => { subscribe: unknown }; chatNodeProcess: (key: string) => { subscribe: unknown } }
+    })(SID as SessionId)
+    expect(typeof face.keyedHooks.chatNode('node-1').subscribe).toBe('function')
+    expect(typeof face.keyedHooks.chatNodeProcess('node-1').subscribe).toBe('function')
     await b.runtime.dispose()
   })
 

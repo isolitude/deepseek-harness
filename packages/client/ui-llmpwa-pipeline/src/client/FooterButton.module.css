@@ -1,0 +1,27 @@
+.action {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: 1px solid var(--dsw-alias-border-inverted, #e5e7eb);
+  background: transparent;
+  color: var(--dsw-alias-label-primary, #111827);
+  border-radius: 6px;
+  padding: 6px 8px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.action:hover {
+  background: var(--dsw-alias-bg-overlay, #f3f4f6);
+}
+
+.action[data-wide='false'] {
+  justify-content: center;
+}
+
+.label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

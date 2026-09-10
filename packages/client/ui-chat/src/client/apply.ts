@@ -21,12 +21,13 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-workspace/client'
 import type {
   ChatNodeTurnDataInjected, ChatScrollPosition, ChatViewInjected,
-  TurnTailOwnerProps,
+  EmbeddedConversationInjected, TurnTailOwnerProps,
 } from './contract/slots.ts'
 import type { ChatSnapshot } from './contract/snapshot.ts'
 import { EMPTY_CHAT_SNAPSHOT } from './contract/snapshot.ts'
 import { ApprovalCommand } from './chat/ApprovalCommand.tsx'
 import { ChatView } from './chat/ChatView.tsx'
+import { EmbeddedConversation } from './embedded/EmbeddedConversation.tsx'
 import { registerChatNodeRenderers } from './chat/register-node-renderers.ts'
 import { StatsPills } from './chat/StatsPills.tsx'
 import { registerConversationNodes } from './conversation-nodes/register.ts'
@@ -175,6 +176,21 @@ export function apply(ctx: Context): void {
     }, ChatView)
     return disposeView
   })
+
+  ctx.slots.inject('conversation.embedded', () => ctx.slots.register({
+    name: 'conversation.embedded',
+    locale: NS,
+    inject: (sessionId: SessionId): EmbeddedConversationInjected => {
+      const binding = ctx.sessions.binding(sessionId)
+      if (binding === undefined) throw new Error(`ui-chat: unknown session "${sessionId}"`)
+      const chat = chatSource(binding)
+      return {
+        keyedHooks: {
+          chatNode: key => chat.getSnapshot().nodes.source(key),
+        },
+      }
+    },
+  }, EmbeddedConversation))
 
   ctx.slots.inject('conversation.composer.dock', () =>
     ctx.slots.register({

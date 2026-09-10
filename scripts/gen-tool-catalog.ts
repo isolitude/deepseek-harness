@@ -24,6 +24,8 @@ import LocalBashExecutor from '@deepseek-ai/dsh-bash-local'
 import * as BashEnvPlugin from '@deepseek-ai/dsh-shell-env'
 import { PwshLocalExecutor } from '@deepseek-ai/dsh-pwsh-local'
 import LocalSubprocessRuntime from '@deepseek-ai/dsh-subprocess-local'
+import Ssh2RemoteExecutor from '@deepseek-ai/dsh-remote-ssh2'
+import * as ToolSsh from '@deepseek-ai/dsh-tool-remote'
 import LocalFileSystem from '@deepseek-ai/dsh-fs-local'
 import { AttachmentStore } from '@deepseek-ai/dsh-attachment'
 import type { ImageAttachmentLimits, ImageAttachmentRef, SaveImageAttachment, StoredImageAttachment } from '@deepseek-ai/dsh-attachment'
@@ -412,6 +414,21 @@ const TOOL_PACKAGES: ToolPackage[] = [
     },
     note:
       'glob and grep are unconditional discovery tools that spawn the packaged ripgrep binary (`@vscode/ripgrep`) through ctx.subprocess as ordinary foreground calls (never background jobs) — no host `rg` install and no shell layer. The catalog uses `sampleOverCapGlobResults: true`; deployments must choose that behavior explicitly. Capped results save the complete formatted list through the optional ctx.spillStore backend; returned locators are follow-up-readable/searchable when the backend exposes local paths in co-located deployments.',
+  },
+  {
+    pkg: '@deepseek-ai/dsh-tool-remote',
+    dir: 'tool-remote',
+    source: 'packages/remote/tool-remote/src/index.ts',
+    requires: ['ctx.tools', 'ctx.remote', 'ctx.systemPrompt', 'ctx.credentials at call time when a password/passphrase ref is configured'],
+    writes: ['tool/call', 'tool/result'],
+    async mount(ctx) {
+      // The registry needs the seam service present; constructing the
+      // provider registers it without any connection.
+      new Ssh2RemoteExecutor(ctx, {})
+      await ctx.plugin(ToolSsh)
+    },
+    note:
+      'The remote_* tools are the model-facing consumers of the remote-execution seam (ctx.remote). Each call resolves the calling session\'s nearest .dsh/config.yml until a `remote:` block appears, materializes auth inside the tool boundary, and delegates to the mounted provider (dsh-remote-ssh2); a missing configuration fails loud. Push/pull refuse overwrites by default.',
   },
   {
     pkg: '@deepseek-ai/dsh-tool-terminal',

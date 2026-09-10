@@ -34,6 +34,7 @@
 | `@deepseek-ai/dsh-tool-str-replace-editor` | `str_replace_editor` | `ctx.tools`、`ctx.fs` | `tool/call`、`fs/observed after view presence/absence, edit absence, or successful mutation`、`tool/result` | - | 基于文件系统 seam 的独立查看／创建／唯一字面量替换／按行插入工具；可与任何 shell 或终端接口组合。 |
 | `@deepseek-ai/dsh-tool-fs` | `edit`、`read`、`read_image`、`write` | `ctx.tools`、`ctx.fs`、`ctx.systemPrompt`、`ctx.attachments (image-tool registration)`、`ctx.llm + an image-capable route (image-tool execution)` | `tool/call`、`fs/write-intent or fs/edit-intent for mutations`、`fs/observed after read presence/absence or successful file operation`、`durable attachment (read_image)`、`tool/result` | - | 先读后写／编辑策略由 `@deepseek-ai/dsh-fs-observation-policy` 添加；它是一个 `fs/*` 事件门禁插件，不会改变 schema。加载这些工具的部署按预期也应加载该插件。没有 `ctx.attachments` 时图片工具不会注册；其 schema 与路由无关，执行时除非确切路由的模型声明图片输入，否则拒绝。 |
 | `@deepseek-ai/dsh-tool-fs-search` | `glob`、`grep` | `ctx.tools`、`ctx.subprocess`、`ctx.systemPrompt` | `tool/call`、`tool/result` | - | glob 和 grep 是无条件可用的发现工具，通过 ctx.subprocess spawn 随包提供的 ripgrep 二进制文件（`@vscode/ripgrep`），并作为普通前台调用运行，绝不作为后台任务；无需在宿主机安装 `rg`，也不经过 shell 层。本目录使用 `sampleOverCapGlobResults: true`；部署必须显式选择该行为。结果超过上限时，会通过可选的 ctx.spillStore 后端保存完整的格式化列表；在共置部署中，如果后端公开本地路径，返回的定位信息可供后续读取／搜索。 |
+| `@deepseek-ai/dsh-tool-remote` | `remote_edit`、`remote_exec`、`remote_pull`、`remote_push`、`remote_read`、`remote_write` | `ctx.tools`、`ctx.remote`、`ctx.systemPrompt`、`configured credential at call time` | `tool/call`、`tool/result` | - | remote_* 工具是远程执行接缝（ctx.remote）的模型可见消费方。每次调用都向上解析调用方会话最近的 `.dsh/config.yml`，直到出现 `remote:` 块，在工具边界内物化认证，并委托给已挂载的后端（dsh-remote-ssh2）；配置缺失时显式报错。push/pull 默认拒绝覆盖。 |
 | `@deepseek-ai/dsh-tool-terminal` | `terminal_close`、`terminal_list`、`terminal_open`、`terminal_read`、`terminal_send`、`terminal_signal` | `ctx.tools`、`ctx.terminals`、`ctx.systemPrompt`、`ctx.jobs at call time for run_in_background` | `tool/call`、`tool/result` | - | 这 6 个终端工具需要选择启用，用于补充一次性 bash／文件系统工具。`terminal_send(run_in_background: true)` 会注册到 `ctx.jobs`；schema 不包含 TUI、具名按键序列、BEL、调整尺寸、自动启动和跨 agent 共享。 |
 | `@deepseek-ai/dsh-tool-goal` | `create_goal`、`get_goal`、`update_goal` | `ctx.tools`、`ctx.agents`、`ctx.goals`、`ctx.systemPrompt`、`a calling Agent in an authorized open turn` | `tool/call`、`goal/change for mutations`、`tool/result` | - | create、edit、pause 和 resume 要求直接来自人类的根权限；complete 和 blocked 也接受确切的当前 Goal Round。blocked 的默认下限是 3 个获准的 Round。 |
 | `@deepseek-ai/dsh-schedule` | `schedule_create`、`schedule_delete`、`schedule_list` | `ctx.tools`、`ctx.sessions`、Session 持久化、未来创建的 live 根 Agent | `tool/call`、`schedule/change create or delete`、`tool/result` | - | 仅在选择启用的 Schedule 插件加载后创建的 live 根 Agent scope 内注册。版本 1 接受 after_seconds、显式绝对 at 和有界固定速率 every_seconds，并披露 session-local 交付；管理读取与变更必须通过共享的 Session 持久化 barrier。 |
@@ -1107,6 +1108,192 @@ pwsh 工具是 Windows 组合中 bash 执行器 seam 的 PowerShell 方言消费
 来源：[`packages/fs/tool-fs-search/src/index.ts`](../packages/fs/tool-fs-search/src/index.ts)
 
 glob 和 grep 是无条件可用的发现工具，通过 ctx.subprocess spawn 随包提供的 ripgrep 二进制文件（`@vscode/ripgrep`），并作为普通前台调用运行，绝不作为后台任务；无需在宿主机安装 `rg`，也不经过 shell 层。本目录使用 `sampleOverCapGlobResults: true`；部署必须显式选择该行为。结果超过上限时，会通过可选的 ctx.spillStore 后端保存完整的格式化列表；在共置部署中，如果后端公开本地路径，返回的定位信息可供后续读取／搜索。
+
+<a id="deepseek-aidsh-tool-remote"></a>
+
+## `@deepseek-ai/dsh-tool-remote`
+
+### `remote_edit`
+
+对远程服务器上现有的 UTF-8 文件应用一次字面量文本替换。默认情况下 old_string 必须恰好出现一次；设置 replace_all 可替换每次出现。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "path": {
+      "type": "string",
+      "description": "Remote file path; relative paths resolve against the analysis remoteRoot."
+    },
+    "old_string": {
+      "type": "string",
+      "description": "Literal text to replace."
+    },
+    "new_string": {
+      "type": "string",
+      "description": "Replacement text."
+    },
+    "replace_all": {
+      "type": "boolean",
+      "description": "Replace every occurrence instead of requiring exactly one."
+    }
+  },
+  "required": [
+    "path",
+    "old_string",
+    "new_string"
+  ]
+}
+```
+
+Source: [`packages/remote/tool-remote/src/index.ts`](../packages/remote/tool-remote/src/index.ts)
+
+### `remote_exec`
+
+在该 analysis 配置的远程服务器上运行一条 shell 命令。返回有界 stdout/stderr 与远程退出码；非零退出是报告的结果，而不是失败。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "command": {
+      "type": "string",
+      "description": "The shell command to execute on the remote server."
+    },
+    "workdir": {
+      "type": "string",
+      "description": "Remote working directory. Defaults to the analysis remoteRoot."
+    },
+    "timeout_ms": {
+      "type": "number",
+      "description": "Timeout in milliseconds. The tool applies its configured default and kills the command on expiry."
+    }
+  },
+  "required": [
+    "command"
+  ]
+}
+```
+
+Source: [`packages/remote/tool-remote/src/index.ts`](../packages/remote/tool-remote/src/index.ts)
+
+### `remote_pull`
+
+把远程文件下载到本地会话工作区（SFTP）。除非 overwrite 为 true，否则拒绝覆盖已存在的本地文件。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "remote_path": {
+      "type": "string",
+      "description": "Remote source path; relative paths resolve against the analysis remoteRoot."
+    },
+    "local_path": {
+      "type": "string",
+      "description": "Local destination path, relative to the session workspace."
+    },
+    "overwrite": {
+      "type": "boolean",
+      "description": "Replace an existing local file. Defaults to false."
+    }
+  },
+  "required": [
+    "remote_path",
+    "local_path"
+  ]
+}
+```
+
+Source: [`packages/remote/tool-remote/src/index.ts`](../packages/remote/tool-remote/src/index.ts)
+
+### `remote_push`
+
+把本地文件上传到远程服务器（SFTP）。除非 overwrite 为 true，否则拒绝覆盖已存在的远程文件。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "local_path": {
+      "type": "string",
+      "description": "Local source path, relative to the session workspace."
+    },
+    "remote_path": {
+      "type": "string",
+      "description": "Remote destination path; relative paths resolve against the analysis remoteRoot."
+    },
+    "overwrite": {
+      "type": "boolean",
+      "description": "Replace an existing remote file. Defaults to false."
+    }
+  },
+  "required": [
+    "local_path",
+    "remote_path"
+  ]
+}
+```
+
+Source: [`packages/remote/tool-remote/src/index.ts`](../packages/remote/tool-remote/src/index.ts)
+
+### `remote_read`
+
+读取远程服务器上带行号的文本文件。用 offset 与 limit 对大文件分页。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "path": {
+      "type": "string",
+      "description": "Remote file path; relative paths resolve against the analysis remoteRoot."
+    },
+    "offset": {
+      "type": "number",
+      "description": "1-based first line of the window. Defaults to 1."
+    },
+    "limit": {
+      "type": "number",
+      "description": "Maximum lines returned. Defaults to and caps at 2000."
+    }
+  },
+  "required": [
+    "path"
+  ]
+}
+```
+
+Source: [`packages/remote/tool-remote/src/index.ts`](../packages/remote/tool-remote/src/index.ts)
+
+### `remote_write`
+
+在远程服务器上创建或完全替换 UTF-8 文本文件。写入是原子的；失败的写入不留下半成品文件。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "path": {
+      "type": "string",
+      "description": "Remote file path; relative paths resolve against the analysis remoteRoot."
+    },
+    "content": {
+      "type": "string",
+      "description": "Complete new file content."
+    }
+  },
+  "required": [
+    "path",
+    "content"
+  ]
+}
+```
+
+Source: [`packages/remote/tool-remote/src/index.ts`](../packages/remote/tool-remote/src/index.ts)
+
+The remote_* tools are the model-facing consumers of the remote-execution seam (ctx.remote). Each call resolves the calling session's nearest .dsh/config.yml until a `remote:` block appears, materializes auth inside the tool boundary, and delegates to the mounted provider (dsh-remote-ssh2); a missing configuration fails loud. Push/pull refuse overwrites by default.
+
 
 <a id="deepseek-aidsh-tool-terminal"></a>
 

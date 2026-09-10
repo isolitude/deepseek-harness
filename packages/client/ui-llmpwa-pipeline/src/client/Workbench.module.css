@@ -1,0 +1,437 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  background: var(--dsw-alias-bg-base, #f9fafb);
+  color: var(--dsw-alias-label-primary, #111827);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--dsw-alias-border-inverted, #e5e7eb);
+  flex: 0 0 auto;
+}
+
+.title {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.close {
+  border: 1px solid var(--dsw-alias-border-inverted, #e5e7eb);
+  background: transparent;
+  color: var(--dsw-alias-label-primary, #111827);
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.close:hover {
+  background: var(--dsw-alias-bg-overlay, #f3f4f6);
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.openAgent {
+  border: 1px solid var(--dsw-alias-border-inverted, #e5e7eb);
+  background: var(--dsw-alias-bg-overlay, #f3f4f6);
+  color: var(--dsw-alias-label-primary, #111827);
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.openAgent:hover:not(:disabled) {
+  background: var(--dsw-alias-bg-base, #f9fafb);
+}
+
+.openAgent:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.body {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.listPane {
+  flex: 0 0 240px;
+  border-right: 1px solid var(--dsw-alias-border-inverted, #e5e7eb);
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.listHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px 8px;
+}
+
+.listTitle {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.refresh {
+  border: 1px solid var(--dsw-alias-border-inverted, #e5e7eb);
+  background: transparent;
+  color: var(--dsw-alias-label-secondary, #6b7280);
+  border-radius: 6px;
+  padding: 3px 8px;
+  cursor: pointer;
+}
+
+.refresh:hover {
+  background: var(--dsw-alias-bg-overlay, #f3f4f6);
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.listItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.analysis {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: left;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--dsw-alias-label-primary, #111827);
+  border-radius: 6px;
+  padding: 6px 8px;
+  cursor: pointer;
+}
+
+.analysis:hover {
+  background: var(--dsw-alias-bg-overlay, #f3f4f6);
+}
+
+.analysis[data-selected='true'] {
+  border-color: var(--dsw-alias-border-inverted, #9ca3af);
+  background: var(--dsw-alias-bg-overlay, #f3f4f6);
+}
+
+.runFlag {
+  flex: 0 0 auto;
+  color: var(--dsw-alias-label-tertiary, #6b7280);
+  font-size: 11px;
+  line-height: 18px;
+}
+
+.muted {
+  color: var(--dsw-alias-label-secondary, #6b7280);
+  font-size: 12px;
+  padding: 8px;
+}
+
+.preview {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+}
+
+.tabs {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--dsw-alias-border-inverted, #e5e7eb);
+  margin-bottom: 12px;
+  flex: 0 0 auto;
+}
+
+.tab {
+  border: none;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary, #6b7280);
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  border-bottom: 2px solid transparent;
+}
+
+.tab[data-active='true'] {
+  color: var(--dsw-alias-label-primary, #111827);
+  border-bottom-color: var(--dsw-alias-label-primary, #111827);
+}
+
+.tab:hover {
+  color: var(--dsw-alias-label-primary, #111827);
+}
+
+.previewBody {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.mainPreview {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+}
+
+/* A transparent click-catcher over the page behind the floating agent panel.
+   Clicking the page collapses the panel to a title strip so the DAG stays
+   visible; the panel itself renders above this backdrop. */
+.drawerBackdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  background: transparent;
+}
+
+/* Floating right-edge agent panel overlaying the preview (does not reflow
+   the DAG behind it) and its draggable left divider. */
+.drawer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 11;
+  border-left: 1px solid var(--dsw-alias-border-inverted, #e5e7eb);
+  background: var(--dsw-alias-bg-base, #f9fafb);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.drawerResize {
+  position: absolute;
+  left: -3px;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  background: transparent;
+  touch-action: none;
+}
+
+.drawerResize:hover,
+.drawerResize:active {
+  background: var(--dsw-alias-bg-overlay, #f3f4f6);
+}
+
+/* Collapsed title strip docked to the right edge. */
+.drawerStrip {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 11;
+  width: 32px;
+  border: none;
+  border-left: 1px solid var(--dsw-alias-border-inverted, #e5e7eb);
+  background: var(--dsw-alias-bg-overlay, #f3f4f6);
+  color: var(--dsw-alias-label-primary, #111827);
+  cursor: pointer;
+  font-size: 13px;
+  writing-mode: vertical-rl;
+  letter-spacing: 0.06em;
+  padding: 8px 0;
+}
+
+.drawerStrip:hover {
+  background: var(--dsw-alias-bg-base, #f9fafb);
+}
+
+.drawerHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--dsw-alias-border-inverted, #e5e7eb);
+  flex: 0 0 auto;
+}
+
+.drawerTitle {
+  border: none;
+  background: transparent;
+  color: var(--dsw-alias-label-primary, #111827);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 0;
+  cursor: pointer;
+  margin-right: auto;
+  text-align: left;
+}
+
+.newSession {
+  border: 1px solid var(--dsw-alias-border-inverted, #e5e7eb);
+  background: transparent;
+  color: var(--dsw-alias-label-primary, #111827);
+  border-radius: 6px;
+  padding: 3px 8px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.newSession:hover {
+  background: var(--dsw-alias-bg-overlay, #f3f4f6);
+}
+
+.drawerBody {
+  padding: 12px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.drawerReady {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* The embedded conversation fills the drawer body so its transcript scrolls
+   inside the ready block while the header status and the view button stay put. */
+.drawerChat {
+  flex: 1 1 auto;
+  min-height: 180px;
+  display: flex;
+  flex-direction: column;
+}
+
+.placeholder {
+  color: var(--dsw-alias-label-secondary, #6b7280);
+  font-size: 13px;
+}
+
+.error {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 640px;
+}
+
+.errorLine {
+  margin: 0;
+  color: var(--dsw-alias-label-primary, #111827);
+  font-size: 13px;
+}
+
+.hint {
+  background: var(--dsw-alias-bg-overlay, #f3f4f6);
+  border: 1px solid var(--dsw-alias-border-inverted, #e5e7eb);
+  border-radius: 6px;
+  padding: 8px;
+  overflow-x: auto;
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.dagWrap {
+  overflow: auto;
+}
+
+.sectionTitle {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.references {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  height: 100%;
+}
+
+.refList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.refButton {
+  border: 1px solid var(--dsw-alias-border-inverted, #e5e7eb);
+  background: transparent;
+  color: var(--dsw-alias-label-primary, #111827);
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.refButton:hover {
+  background: var(--dsw-alias-bg-overlay, #f3f4f6);
+}
+
+.refButton[data-selected='true'] {
+  border-color: var(--dsw-alias-border-inverted, #9ca3af);
+  background: var(--dsw-alias-bg-overlay, #f3f4f6);
+}
+
+/* The document read area grows to the bottom of the pane and scrolls; the
+   text sits directly on the pane with no filled card behind it, and keeps a
+   small inset from the pane edges so content does not run flush to the border. */
+.refBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 4px 24px 24px;
+}
+
+/* The shared CodeBlock draws a filled code-block background and a rounded
+   banner. In the reference read we want syntax colors only, so the code sits
+   on the pane with no background. */
+.refCode {
+  background: transparent;
+  border: none;
+  margin: 0;
+}
+
+.refCode :where(.bannerWrap) {
+  background: transparent;
+}
+
+.refCode :where(.banner) {
+  background: transparent;
+}
+
+.refCode :where(pre) {
+  background: transparent;
+}
+
+.refCode :where(pre.shiki) {
+  background: transparent !important;
+}
+
+.refFallback {
+  margin: 0;
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
