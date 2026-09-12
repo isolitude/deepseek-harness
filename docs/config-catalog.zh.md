@@ -302,7 +302,7 @@ export interface Config {
 }
 ```
 
-来源：[`packages/api/workspace-files/src/index.ts:69`](../packages/api/workspace-files/src/index.ts)
+来源：[`packages/api/workspace-files/src/index.ts:72`](../packages/api/workspace-files/src/index.ts)
 
 <a id="deepseek-aidsh-attachment-local"></a>
 
@@ -2576,6 +2576,33 @@ export interface Config {
 
 来源：[`packages/ssh/ssh/src/index.ts:17`](../packages/ssh/ssh/src/index.ts)
 
+<a id="deepseek-aidsh-remote-ssh2"></a>
+
+## `@deepseek-ai/dsh-remote-ssh2`
+
+```ts config-catalog
+/**
+ * Provider config: shared connection and payload limits. Values that vary per
+ * analysis live on the tool-built {@link RemoteConnection}, never here.
+ */
+export interface Config {
+  /** Close a pooled connection after this idle time. Default 60s. */
+  idleTimeoutMs?: number
+  /** Connection-establishment deadline. Default 15s. */
+  connectTimeoutMs?: number
+  /** How often to send SSH keepalive packets. Default 60s; 0 disables. */
+  keepaliveIntervalMs?: number
+  /** Consecutive unanswered keepalives before the connection is dropped. Default 3. */
+  keepaliveCountMax?: number
+  /** Per-stream cap for one command's collected output. Default 256 KiB. */
+  maxOutputBytes?: number
+  /** Cap for one text read/write/edit payload. Default 16 MiB. */
+  maxReadBytes?: number
+}
+```
+
+来源：[`packages/remote/remote-ssh2/src/index.ts:46`](../packages/remote/remote-ssh2/src/index.ts)
+
 <a id="deepseek-aidsh-storage-domain"></a>
 
 ## `@deepseek-ai/dsh-storage-domain`
@@ -2915,7 +2942,7 @@ export interface Config {
 }
 ```
 
-来源：[`packages/core/system-prompt/src/index.ts:248`](../packages/core/system-prompt/src/index.ts)
+来源：[`packages/core/system-prompt/src/index.ts:249`](../packages/core/system-prompt/src/index.ts)
 
 <a id="deepseek-aidsh-terminal-bash"></a>
 
@@ -3289,6 +3316,28 @@ export interface Config {
 
 来源：[`packages/skill/tool-skill/src/index.ts:61`](../packages/skill/tool-skill/src/index.ts)
 
+<a id="deepseek-aidsh-tool-remote"></a>
+
+## `@deepseek-ai/dsh-tool-remote`
+
+需要：`tools` · `remote` · `systemPrompt`
+
+```ts config-catalog
+/** Plugin config (all optional — `Config` supplies the defaults). */
+export interface Config {
+  /** Default command deadline in milliseconds. Default 60s. */
+  timeoutMs?: number
+  /** Maximum lines returned by one `remote_read` call. Default 2000. */
+  readLimit?: number
+  /** Default transfer cap in bytes. Default 256 MiB. */
+  maxTransferBytes?: number
+  /** Default remote working directory for `remote_exec`. Default = config.remoteRoot. */
+  workdir?: string
+}
+```
+
+来源：[`packages/remote/tool-remote/src/index.ts:26`](../packages/remote/tool-remote/src/index.ts)
+
 <a id="deepseek-aidsh-tool-str-replace-editor"></a>
 
 ## `@deepseek-ai/dsh-tool-str-replace-editor`
@@ -3595,6 +3644,30 @@ export interface Config {
 
 来源：[`packages/bundle/web-app/src/index.ts:44`](../packages/bundle/web-app/src/index.ts)
 
+<a id="deepseek-aidsh-web-easytransnote"></a>
+
+## `@deepseek-ai/dsh-web-easytransnote`
+
+需要：`web`
+
+```ts config-catalog
+/** Plugin config (all optional — `apply` fills credential, env, and constant defaults). */
+export interface Config {
+  /** Literal easytransnote API key; prefer {@link apiKeyEnv} so no secret enters configuration files. */
+  apiKey?: string
+  /** Credential reference resolved for each operation; defaults to `EASYTRANSNOTE_API_KEY`. */
+  apiKeyEnv?: string
+  /** Endpoint base; `/beta/v1/web/search` and `/beta/v1/web/fetch` are appended. */
+  baseURL?: string
+  /** Search model name. Defaults to `web-search-base`. */
+  searchModel?: string
+  /** Fetch model name. Defaults to `web-fetch-lite`. */
+  fetchModel?: string
+}
+```
+
+来源：[`packages/web/web-easytransnote/src/index.ts:50`](../packages/web/web-easytransnote/src/index.ts)
+
 <a id="deepseek-aidsh-web-fetch-http"></a>
 
 ## `@deepseek-ai/dsh-web-fetch-http`
@@ -3797,6 +3870,7 @@ export interface Config {
 - `@deepseek-ai/dsh-client-ui-input-trigger`（[`packages/client/ui-input-trigger/src/index.ts`](../packages/client/ui-input-trigger/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-jobs`（[`packages/client/ui-jobs/src/index.ts`](../packages/client/ui-jobs/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-layout`（[`packages/client/ui-layout/src/index.ts`](../packages/client/ui-layout/src/index.ts)）
+- `@deepseek-ai/dsh-client-ui-llmpwa-pipeline`（[`packages/client/ui-llmpwa-pipeline/src/index.ts`](../packages/client/ui-llmpwa-pipeline/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-message-feedback`（[`packages/client/ui-message-feedback/src/index.ts`](../packages/client/ui-message-feedback/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-model-selection`（[`packages/client/ui-model-selection/src/index.ts`](../packages/client/ui-model-selection/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-open-in-app`（[`packages/client/ui-open-in-app/src/index.ts`](../packages/client/ui-open-in-app/src/index.ts)）
@@ -3934,6 +4008,7 @@ export interface Config {
 - `@deepseek-ai/dsh-session-snapshot`（[`packages/test-support/session-snapshot/src/index.ts`](../packages/test-support/session-snapshot/src/index.ts)）
 - `@deepseek-ai/dsh-session-telemetry`（[`packages/session/session-telemetry/src/index.ts`](../packages/session/session-telemetry/src/index.ts)）
 - `@deepseek-ai/dsh-session-title-llm`（[`packages/session/session-title-llm/src/index.ts`](../packages/session/session-title-llm/src/index.ts)）
+- `@deepseek-ai/dsh-remote`（[`packages/remote/remote/src/index.ts`](../packages/remote/remote/src/index.ts)）
 - `@deepseek-ai/dsh-subagent-in-process-driver`（[`packages/subagent/subagent-in-process-driver/src/index.ts`](../packages/subagent/subagent-in-process-driver/src/index.ts)）
 - `@deepseek-ai/dsh-timeout`（[`packages/util/timeout/src/index.ts`](../packages/util/timeout/src/index.ts)）
 - `@deepseek-ai/dsh-typert-generator`（[`packages/typert/generator/src/index.ts`](../packages/typert/generator/src/index.ts)）

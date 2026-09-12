@@ -446,20 +446,26 @@
 
     # The shared base enables the stable model-facing web_search and web_fetch
     # tools. The Web app disables this host row and composes both tools per agent
-    # preset; products with a stricter network policy override tool-web. DeepSeek
-    # search resolves the same DEEPSEEK_API_KEY
-    # credential the Models page manages for chat, at each search; its Messages
-    # endpoint is separate from the chat-completions endpoint, so it takes its own
-    # base-URL override. Anonymous fetch accepts only public HTTP(S) destinations,
-    # resolves and validates every destination, and pins every actual connection.
-    # Search is a full auxiliary model request with server-side retrieval, so this
-    # shipped DeepSeek route gets 60s while the provider-neutral tool default
-    # remains 30s.
+    # preset; products with a stricter network policy override tool-web. The
+    # default route is easytransnote, which serves search and fetch from one
+    # hosted endpoint and resolves its key from the EASYTRANSNOTE_API_KEY
+    # credential per operation, so a rotated key reaches the next call without a
+    # restart. The DeepSeek search and anonymous HTTP fetch rows below stay
+    # registered as alternatives to flip to by changing web's
+    # searchProvider/fetchProvider; they do not auto-select because web pins
+    # easytransnote. Search is a full auxiliary model request with server-side
+    # retrieval, so the shipped route gets 60s while the provider-neutral tool
+    # default remains 30s.
     - id: web
       name: '@deepseek-ai/dsh-web'
       config:
-        searchProvider: deepseek-official
-        fetchProvider: http
+        searchProvider: easytransnote
+        fetchProvider: easytransnote
+
+    - id: web-easytransnote
+      name: '@deepseek-ai/dsh-web-easytransnote'
+      config:
+        apiKeyEnv: EASYTRANSNOTE_API_KEY
 
     - id: web-search-deepseek
       name: '@deepseek-ai/dsh-web-search-deepseek'

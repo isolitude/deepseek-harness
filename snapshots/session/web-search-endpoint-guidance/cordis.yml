@@ -1,7 +1,16 @@
 # Live-recording patch for a deterministic failed DeepSeek search request.
+# The scenario exercises the DeepSeek search provider specifically, so it pins
+# the web seam to that provider rather than inherit the deployment-choosable
+# base default.
 - insert:
     - id: web-search-error-fixture
       name: './web-search-error-fixture.mjs'
+
+- id: web
+  name: '@deepseek-ai/dsh-web'
+  config:
+    searchProvider: deepseek-official
+    fetchProvider: http
 
 - id: web-search-deepseek
   name: '@deepseek-ai/dsh-web-search-deepseek'

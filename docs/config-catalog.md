@@ -300,7 +300,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/api/workspace-files/src/index.ts:69`](../packages/api/workspace-files/src/index.ts)
+Source: [`packages/api/workspace-files/src/index.ts:72`](../packages/api/workspace-files/src/index.ts)
 
 <a id="deepseek-aidsh-attachment-local"></a>
 
@@ -2005,6 +2005,33 @@ Depends on: [`LocalConfig`](#deepseek-aidsh-pwsh-local)
 
 Source: [`packages/shell/pwsh-sandbox/src/index.ts:40`](../packages/shell/pwsh-sandbox/src/index.ts)
 
+<a id="deepseek-aidsh-remote-ssh2"></a>
+
+## `@deepseek-ai/dsh-remote-ssh2`
+
+```ts config-catalog
+/**
+ * Provider config: shared connection and payload limits. Values that vary per
+ * analysis live on the tool-built {@link RemoteConnection}, never here.
+ */
+export interface Config {
+  /** Close a pooled connection after this idle time. Default 60s. */
+  idleTimeoutMs?: number
+  /** Connection-establishment deadline. Default 15s. */
+  connectTimeoutMs?: number
+  /** How often to send SSH keepalive packets. Default 60s; 0 disables. */
+  keepaliveIntervalMs?: number
+  /** Consecutive unanswered keepalives before the connection is dropped. Default 3. */
+  keepaliveCountMax?: number
+  /** Per-stream cap for one command's collected output. Default 256 KiB. */
+  maxOutputBytes?: number
+  /** Cap for one text read/write/edit payload. Default 16 MiB. */
+  maxReadBytes?: number
+}
+```
+
+Source: [`packages/remote/remote-ssh2/src/index.ts:46`](../packages/remote/remote-ssh2/src/index.ts)
+
 <a id="deepseek-aidsh-repeat-tool-reminder"></a>
 
 ## `@deepseek-ai/dsh-repeat-tool-reminder`
@@ -2913,7 +2940,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/core/system-prompt/src/index.ts:248`](../packages/core/system-prompt/src/index.ts)
+Source: [`packages/core/system-prompt/src/index.ts:249`](../packages/core/system-prompt/src/index.ts)
 
 <a id="deepseek-aidsh-terminal-bash"></a>
 
@@ -3252,6 +3279,28 @@ export interface Config {
 ```
 
 Source: [`packages/workflow/tool-ralph/src/index.ts:21`](../packages/workflow/tool-ralph/src/index.ts)
+
+<a id="deepseek-aidsh-tool-remote"></a>
+
+## `@deepseek-ai/dsh-tool-remote`
+
+Requires: `tools` · `remote` · `systemPrompt`
+
+```ts config-catalog
+/** Plugin config (all optional — `Config` supplies the defaults). */
+export interface Config {
+  /** Default command deadline in milliseconds. Default 60s. */
+  timeoutMs?: number
+  /** Maximum lines returned by one `remote_read` call. Default 2000. */
+  readLimit?: number
+  /** Default transfer cap in bytes. Default 256 MiB. */
+  maxTransferBytes?: number
+  /** Default remote working directory for `remote_exec`. Default = config.remoteRoot. */
+  workdir?: string
+}
+```
+
+Source: [`packages/remote/tool-remote/src/index.ts:26`](../packages/remote/tool-remote/src/index.ts)
 
 <a id="deepseek-aidsh-tool-session-query"></a>
 
@@ -3593,6 +3642,30 @@ export interface Config {
 
 Source: [`packages/bundle/web-app/src/index.ts:44`](../packages/bundle/web-app/src/index.ts)
 
+<a id="deepseek-aidsh-web-easytransnote"></a>
+
+## `@deepseek-ai/dsh-web-easytransnote`
+
+Requires: `web`
+
+```ts config-catalog
+/** Plugin config (all optional — `apply` fills credential, env, and constant defaults). */
+export interface Config {
+  /** Literal easytransnote API key; prefer {@link apiKeyEnv} so no secret enters configuration files. */
+  apiKey?: string
+  /** Credential reference resolved for each operation; defaults to `EASYTRANSNOTE_API_KEY`. */
+  apiKeyEnv?: string
+  /** Endpoint base; `/beta/v1/web/search` and `/beta/v1/web/fetch` are appended. */
+  baseURL?: string
+  /** Search model name. Defaults to `web-search-base`. */
+  searchModel?: string
+  /** Fetch model name. Defaults to `web-fetch-lite`. */
+  fetchModel?: string
+}
+```
+
+Source: [`packages/web/web-easytransnote/src/index.ts:50`](../packages/web/web-easytransnote/src/index.ts)
+
 <a id="deepseek-aidsh-web-fetch-http"></a>
 
 ## `@deepseek-ai/dsh-web-fetch-http`
@@ -3795,6 +3868,7 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@deepseek-ai/dsh-client-ui-input-trigger` ([`packages/client/ui-input-trigger/src/index.ts`](../packages/client/ui-input-trigger/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-jobs` ([`packages/client/ui-jobs/src/index.ts`](../packages/client/ui-jobs/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-layout` ([`packages/client/ui-layout/src/index.ts`](../packages/client/ui-layout/src/index.ts))
+- `@deepseek-ai/dsh-client-ui-llmpwa-pipeline` ([`packages/client/ui-llmpwa-pipeline/src/index.ts`](../packages/client/ui-llmpwa-pipeline/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-message-feedback` ([`packages/client/ui-message-feedback/src/index.ts`](../packages/client/ui-message-feedback/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-model-selection` ([`packages/client/ui-model-selection/src/index.ts`](../packages/client/ui-model-selection/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-open-in-app` ([`packages/client/ui-open-in-app/src/index.ts`](../packages/client/ui-open-in-app/src/index.ts))
@@ -3919,6 +3993,7 @@ Imported as libraries by other packages; a `cordis.yml` cannot load them.
 - `@deepseek-ai/dsh-native-command` ([`packages/util/native-command/src/index.ts`](../packages/util/native-command/src/index.ts))
 - `@deepseek-ai/dsh-output-retention` ([`packages/util/output-retention/src/index.ts`](../packages/util/output-retention/src/index.ts))
 - `@deepseek-ai/dsh-package-manifest` ([`packages/util/package-manifest/src/index.ts`](../packages/util/package-manifest/src/index.ts))
+- `@deepseek-ai/dsh-remote` ([`packages/remote/remote/src/index.ts`](../packages/remote/remote/src/index.ts))
 - `@deepseek-ai/dsh-remote-mock` ([`packages/test-support/remote-mock/src/index.ts`](../packages/test-support/remote-mock/src/index.ts))
 - `@deepseek-ai/dsh-sandbox-windows-acl` ([`packages/sandbox/sandbox-windows-acl/src/index.ts`](../packages/sandbox/sandbox-windows-acl/src/index.ts))
 - `@deepseek-ai/dsh-scope` ([`packages/core/scope/src/index.ts`](../packages/core/scope/src/index.ts))

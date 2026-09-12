@@ -1871,6 +1871,9 @@ importers:
       '@deepseek-ai/dsh-web':
         specifier: workspace:^
         version: link:../../web/web
+      '@deepseek-ai/dsh-web-easytransnote':
+        specifier: workspace:^
+        version: link:../../web/web-easytransnote
       '@deepseek-ai/dsh-web-fetch-http':
         specifier: workspace:^
         version: link:../../web/web-fetch-http
@@ -12138,6 +12141,31 @@ importers:
       '@deepseek-ai/dsh-llm':
         specifier: workspace:^
         version: link:../../llm/llm
+
+  packages/web/web-easytransnote:
+    dependencies:
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-credentials':
+        specifier: workspace:^
+        version: link:../../credentials/credentials
+      '@deepseek-ai/dsh-credentials-local':
+        specifier: workspace:^
+        version: link:../../credentials/credentials-local
+      '@deepseek-ai/dsh-launch-environment':
+        specifier: workspace:^
+        version: link:../../util/launch-environment
+      '@deepseek-ai/dsh-settings':
+        specifier: workspace:^
+        version: link:../../settings/settings
+      '@deepseek-ai/dsh-web':
+        specifier: workspace:^
+        version: link:../web
 
   packages/web/web-fetch-http:
     dependencies:
