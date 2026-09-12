@@ -52,7 +52,7 @@ export interface SnapshotError {
 export interface ReferenceFile {
   /** Workspace-relative path, passed to the `read` endpoint. */
   readonly path: string
-  /** Short name shown in the reference list (e.g. `resonances_config.toml`, `document/…`). */
+  /** Short name shown in the reference list (e.g. `resonances_config.toml`, `combined_likelihood_math.md`). */
   readonly name: string
 }
 
@@ -63,6 +63,8 @@ export type ReferenceLoad =
 
 /** Matches an analysis-root resonance config `resonances_config*.toml`. */
 const RESONANCE_CONFIG_PATTERN = /^resonances_config.*\.toml$/
+/** Matches an analysis-root LLM fit config `llm_config*.toml`. */
+const LLM_CONFIG_PATTERN = /^llm_config.*\.toml$/
 /** The analysis-local directory holding supporting reference documents. */
 const DOCUMENT_DIR = 'document'
 
@@ -196,9 +198,9 @@ export async function loadSnapshot(
 
 /**
  * Discover an analysis's reference files: the root `resonances_config*.toml`
- * configs and any file under its `document/` directory. A directory that does
- * not exist (or cannot be listed) contributes nothing, so the result is stable
- * across analyses that omit either part.
+ * and `llm_config*.toml` configs and any file under its `document/` directory.
+ * A directory that does not exist (or cannot be listed) contributes nothing,
+ * so the result is stable across analyses that omit either part.
  * @param remote - the Client Remote.
  * @param sessionId - the session whose workspace resolves the paths.
  * @param analysis - the selected analysis directory.
@@ -216,7 +218,8 @@ export async function listReferenceFiles(
   const root = await remote.workspaceFiles.list(sessionId, dir, signal)
   if (root.ok) {
     for (const entry of root.value.entries) {
-      if (entry.type === 'file' && RESONANCE_CONFIG_PATTERN.test(entry.name)) {
+      if (entry.type === 'file'
+        && (RESONANCE_CONFIG_PATTERN.test(entry.name) || LLM_CONFIG_PATTERN.test(entry.name))) {
         files.push({ path: `${dir}/${entry.name}`, name: entry.name })
       }
     }
@@ -225,11 +228,12 @@ export async function listReferenceFiles(
   if (doc.ok) {
     for (const entry of doc.value.entries) {
       if (entry.type === 'file') {
-        files.push({ path: `${dir}/${DOCUMENT_DIR}/${entry.name}`, name: `${DOCUMENT_DIR}/${entry.name}` })
+        files.push({ path: `${dir}/${DOCUMENT_DIR}/${entry.name}`, name: entry.name })
       }
     }
   }
-  /* v8 ignore next -- `document/` names disambiguate cross-directory rows, so the sort never compares two equal names. */
+  // Order by display name; a stable sort keeps equal-named rows (e.g. a root
+  // config and a `document/` file with the same basename) in insertion order.
   return files.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
 }
 
@@ -268,6 +272,59 @@ export function analysisWorkspaceCwd(workspacePath: string, analysis: string): s
  */
 export function analysisSettingsPath(analysis: string): string {
   return `${ANALYSES_ROOT}/${analysis}/${AGENT_SETTINGS_DIR}/${AGENT_SETTINGS_FILE}`
+}
+
+/** One session-list row the analysis lookup reads: its working directory. */
+type SessionCwdRow = { readonly cwd?: string }
+
+/**
+ * Resolve the analysis whose agent session is the given conversation session.
+ *
+ * The workbench follows the main conversation: when the current session is an
+ * analysis's agent session, the panel should switch to that analysis. The
+ * mapping is read from the restored `agentSessions` table (analysis dir →
+ * session id), then from the live session list by matching the session's
+ * `cwd` to the analysis workspace directory — so a session whose relation has
+ * not been restored yet (e.g. right after a page reload) still resolves. The
+ * `cwd` match is a path suffix against `<workspaceRoot>/LLMPWA/analyses/<analysis>`
+ * (not only a join against `workspacePath`), because an analysis agent session
+ * may sit in the ungrouped bucket rather than be accounted to the workspace
+ * that holds the analyses.
+ *
+ * A session whose `cwd` is not an analysis directory (an ordinary chat or an
+ * unrelated workspace session) resolves to no analysis, so the panel keeps its
+ * own selection.
+ * @param sessionId - the conversation session to match.
+ * @param workspacePath - the workspace root's canonical host path.
+ * @param analyses - the listed analysis directories.
+ * @param agentSessions - the restored analysis → agent session mapping.
+ * @param rows - the current session-list rows, keyed by session id.
+ * @returns the matching analysis directory, or `undefined` when none.
+ */
+export function analysisForSession(
+  sessionId: string | undefined,
+  workspacePath: string,
+  analyses: readonly { readonly dir: string }[],
+  agentSessions: Readonly<Record<string, string>>,
+  rows: Readonly<Record<string, SessionCwdRow>>,
+): string | undefined {
+  if (sessionId === undefined) return undefined
+  for (const analysis of analyses) {
+    if (agentSessions[analysis.dir] === sessionId) return analysis.dir
+  }
+  const cwd = rows[sessionId]?.cwd
+  if (cwd === undefined) return undefined
+  for (const analysis of analyses) {
+    // Match the analysis directory as a path suffix, not only as a join
+    // against `workspacePath` — an analysis agent session may not be accounted
+    // to the workspace that holds the analyses, so its own cwd is the reliable
+    // signal of the analysis it belongs to.
+    const analysisDir = `/${ANALYSES_ROOT}/${analysis.dir}`
+    if (analysisWorkspaceCwd(workspacePath, analysis.dir) === cwd || cwd.endsWith(analysisDir)) {
+      return analysis.dir
+    }
+  }
+  return undefined
 }
 
 /**

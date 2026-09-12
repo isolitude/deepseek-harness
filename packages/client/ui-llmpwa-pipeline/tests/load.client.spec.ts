@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import {
   ANALYSES_ROOT,
+  analysisForSession,
   analysisSettingsPath,
   listAnalyses, loadSnapshot, missingSnapshotHint, PIPELINE_STATE_FILE,
   listReferenceFiles, loadReferenceText,
@@ -127,6 +128,45 @@ describe('missingSnapshotHint', () => {
   })
 })
 
+describe('analysisForSession', () => {
+  const analyses = [{ dir: 'kk_dis' }, { dir: 'kk_pipi' }]
+
+  it('resolves the analysis whose agent session is the given session', () => {
+    expect(analysisForSession('sx', '/ws', analyses, { kk_dis: 'sx' }, {})).toBe('kk_dis')
+  })
+
+  it('falls back to matching the session cwd against the analysis directory', () => {
+    expect(analysisForSession(
+      'sz', '/ws', analyses, {},
+      { sz: { cwd: '/ws/LLMPWA/analyses/kk_pipi' } },
+    )).toBe('kk_pipi')
+  })
+
+  it('matches an ungrouped session whose cwd is the analysis directory', () => {
+    // An analysis agent session may not be accounted to the workspace that
+    // holds the analyses, so its cwd alone (the analysis directory) must still
+    // resolve, even when the workspace path differs.
+    expect(analysisForSession(
+      'sz', '/other/ws', analyses, {},
+      { sz: { cwd: '/home/user/LLMPWA/analyses/kk_dis' } },
+    )).toBe('kk_dis')
+  })
+
+  it('returns undefined for a session without an analysis cwd or mapping', () => {
+    expect(analysisForSession('chat', '/ws', analyses, {}, { chat: { cwd: '/elsewhere' } })).toBeUndefined()
+    expect(analysisForSession('chat', '/ws', analyses, {}, { chat: {} })).toBeUndefined()
+  })
+
+  it('returns undefined when no session is current', () => {
+    expect(analysisForSession(undefined, '/ws', analyses, {}, {})).toBeUndefined()
+  })
+
+  it('ignores a session whose mapped id differs from the stored id', () => {
+    // A mapping that names a different session must not match this session.
+    expect(analysisForSession('other', '/ws', analyses, { kk_dis: 'sx' }, {})).toBeUndefined()
+  })
+})
+
 describe('listReferenceFiles', () => {
   const rootEntries = [
     { name: 'resonances_config.toml', type: 'file' },
@@ -137,7 +177,7 @@ describe('listReferenceFiles', () => {
     { name: 'gen', type: 'directory' },
   ]
 
-  it('collects resonance configs and document files, ignoring the rest', async () => {
+  it('collects resonance and LLM configs and document files, ignoring the rest', async () => {
     const r = remote(
       vi.fn()
         .mockResolvedValueOnce({ ok: true, value: { entries: rootEntries } })
@@ -155,7 +195,8 @@ describe('listReferenceFiles', () => {
       2, SESSION, `${ANALYSES_ROOT}/kk_dis/document`, expect.any(AbortSignal),
     )
     expect(files).toEqual([
-      { path: `${ANALYSES_ROOT}/kk_dis/document/combined_likelihood_math.md`, name: 'document/combined_likelihood_math.md' },
+      { path: `${ANALYSES_ROOT}/kk_dis/document/combined_likelihood_math.md`, name: 'combined_likelihood_math.md' },
+      { path: `${ANALYSES_ROOT}/kk_dis/llm_config_fit.toml`, name: 'llm_config_fit.toml' },
       { path: `${ANALYSES_ROOT}/kk_dis/resonances_config.toml`, name: 'resonances_config.toml' },
       { path: `${ANALYSES_ROOT}/kk_dis/resonances_config_ctrl.toml`, name: 'resonances_config_ctrl.toml' },
     ])
@@ -169,8 +210,8 @@ describe('listReferenceFiles', () => {
       vi.fn(),
     )
     const files = await listReferenceFiles(r, SESSION, 'kk_dis', new AbortController().signal)
-    expect(files).toHaveLength(2)
-    expect(files[0]?.name).toBe('resonances_config.toml')
+    expect(files).toHaveLength(3)
+    expect(files[0]?.name).toBe('llm_config_fit.toml')
   })
 
   it('skips a failed analysis-root listing', async () => {
@@ -180,6 +221,26 @@ describe('listReferenceFiles', () => {
     )
     const files = await listReferenceFiles(r, SESSION, 'kk_dis', new AbortController().signal)
     expect(files).toEqual([])
+  })
+
+  it('keeps equal-named files in insertion order (stable)', async () => {
+    const r = remote(
+      vi.fn()
+        .mockResolvedValueOnce({ ok: true, value: { entries: [
+          { name: 'resonances_config.toml', type: 'file' },
+        ] } })
+        .mockResolvedValueOnce({ ok: true, value: { entries: [
+          { name: 'resonances_config.toml', type: 'file' },
+        ] } }),
+      vi.fn(),
+    )
+    const files = await listReferenceFiles(r, SESSION, 'kk_dis', new AbortController().signal)
+    // A root config and a document file sharing a basename keep the root row
+    // (list insertion order) ahead of the document row.
+    expect(files.map(f => f.path)).toEqual([
+      `${ANALYSES_ROOT}/kk_dis/resonances_config.toml`,
+      `${ANALYSES_ROOT}/kk_dis/document/resonances_config.toml`,
+    ])
   })
 })
 

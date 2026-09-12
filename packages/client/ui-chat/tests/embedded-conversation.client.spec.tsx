@@ -64,6 +64,21 @@ describe('EmbeddedConversation', () => {
     expect(container.textContent).not.toContain('tool-call')
   })
 
+  it('renders assistant replies as markdown (headings, emphasis, and code)', () => {
+    const { container } = render(<EmbeddedConversation {...makeProps({
+      order: ['k1'],
+      nodes: {
+        k1: {
+          kind: 'assistant-step',
+          data: { status: 'settled', blocks: [{ kind: 'text', text: '# Title\n\n**bold** and `code`' }] },
+        },
+      },
+    })} />)
+    expect(screen.getByRole('heading', { level: 1, name: 'Title' })).toBeTruthy()
+    expect(container.textContent).toContain('bold')
+    expect(container.textContent).toContain('code')
+  })
+
   it('omits rows with no text, unknown kinds, and missing nodes', () => {
     const { container } = render(<EmbeddedConversation {...makeProps({
       order: ['k1', 'k2', 'k3'],
@@ -89,6 +104,16 @@ describe('EmbeddedConversation', () => {
     })} />)
     expect(screen.getByText('kept')).toBeTruthy()
     expect(container.textContent).not.toContain('image')
+  })
+
+  it('omits a user row with no text content', () => {
+    const { container } = render(<EmbeddedConversation {...makeProps({
+      order: ['k1'],
+      nodes: {
+        k1: { kind: 'user', data: { content: [{ type: 'image' }] } },
+      },
+    })} />)
+    expect(container.textContent).not.toContain('embedded.role.user')
   })
 
   it('scrolls the transcript to the newest text when it can', () => {

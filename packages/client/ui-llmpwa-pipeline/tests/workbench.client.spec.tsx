@@ -11,11 +11,17 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { useSyncExternalStore } from 'react'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { Workbench, type WorkbenchOverlayProps } from '../src/client/Workbench.tsx'
 import { createWorkbenchStore } from '../src/client/store.ts'
 import type { PipelineSnapshot } from '../src/client/presenters.ts'
+
+const clipboard = vi.hoisted(() => ({ writeClipboard: vi.fn(async () => true) }))
+vi.mock('@deepseek-ai/dsh-client-ui-primitives', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@deepseek-ai/dsh-client-ui-primitives')>()
+  return { ...actual, writeClipboard: clipboard.writeClipboard }
+})
 
 afterEach(() => {
   cleanup()
@@ -31,7 +37,7 @@ function makeProps(options: {
   session?: string | undefined
   sessionIds?: string[]
   running?: string[]
-  byId?: Record<string, { running?: boolean }>
+  byId?: Record<string, { running?: boolean; cwd?: string }>
 } = {}): {
   props: WorkbenchOverlayProps
   instance: ReturnType<ReturnType<typeof createWorkbenchStore>['create']>
@@ -61,7 +67,7 @@ function makeProps(options: {
       useSyncExternalStore(instance.subscribe, () => sel(instance.getSnapshot())),
     useSessions: (sel: (s: {
       current: string | undefined
-      byId: Record<string, { running?: boolean }>
+      byId: Record<string, { running?: boolean; cwd?: string }>
     }) => unknown) => sel({
       current: session,
       byId: options.byId ?? Object.fromEntries(sessionIds.map(id => [id, { running: running.includes(id) }])),
@@ -294,6 +300,21 @@ describe('Workbench', () => {
     expect(loadReference).toHaveBeenCalledWith('s1', 'p/resonances_config.toml', expect.any(AbortSignal))
   })
 
+  it('copies the reference file relative path on right-click', () => {
+    clipboard.writeClipboard.mockClear()
+    const { props, instance, loadReference } = makeProps()
+    instance.actions.opened()
+    instance.actions.selected('kk_dis')
+    instance.actions.referencesReady([{ path: 'LLMPWA/analyses/kk_dis/resonances_config.toml', name: 'resonances_config.toml' }])
+    render(<Workbench {...props} />)
+    openDocs()
+    const button = screen.getByRole('button', { name: 'resonances_config.toml' })
+    fireEvent.contextMenu(button)
+    expect(clipboard.writeClipboard).toHaveBeenCalledWith('LLMPWA/analyses/kk_dis/resonances_config.toml')
+    // The context menu must not trigger a select (read).
+    expect(loadReference).not.toHaveBeenCalled()
+  })
+
   it('shows the reference read error and retries the same file', () => {
     const { props, instance, loadReference } = makeProps()
     instance.actions.opened()
@@ -400,7 +421,9 @@ describe('Workbench', () => {
     instance.actions.agentOpened()
     instance.actions.agentReady('sx' as SessionId)
     render(<Workbench {...props} />)
-    expect(screen.getByText('panel.drawerAgentReady')).toBeTruthy()
+    // The worktree hint stays with no ready banner; the cwd is shown as the
+    // analysis directory.
+    expect(screen.getByText('/ws/LLMPWA/analyses/kk_dis')).toBeTruthy()
     // With the agent current, the drawer requests the embedded conversation slot.
     expect(screen.getByTestId('embedded-chat-stub')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'panel.drawerViewConversation' }))
@@ -416,7 +439,6 @@ describe('Workbench', () => {
     instance.actions.agentOpened()
     instance.actions.agentReady('sx' as SessionId)
     render(<Workbench {...props} />)
-    expect(screen.getByText('panel.drawerAgentReady')).toBeTruthy()
     expect(screen.queryByTestId('embedded-chat-stub')).toBeNull()
   })
 
@@ -652,5 +674,71 @@ describe('Workbench', () => {
     render(<Workbench {...props} />)
     fireEvent.click(screen.getByRole('button', { name: 'panel.openAgent' }))
     expect(openAgent).toHaveBeenCalledWith('/ws', 's1', 'kk_dis', 'sx')
+  })
+
+  it('switches to the analysis whose agent session is the current conversation', () => {
+    // The main conversation holds an analysis agent session; opening the panel
+    // must select that analysis so the DAG and docs match the conversation.
+    const { props, instance } = makeProps({ session: 'sx', sessionIds: ['sx'] })
+    instance.actions.opened()
+    instance.actions.listed([{ dir: 'kk_dis' }, { dir: 'kk_pipi' }])
+    instance.actions.agentSessionsLoaded({ kk_dis: 'sx' as SessionId })
+    render(<Workbench {...props} />)
+    expect(instance.getSnapshot().selected).toBe('kk_dis')
+  })
+
+  it('switches to the analysis matching the current session cwd without a mapping', () => {
+    // No restored mapping, but the live session's cwd is the analysis dir; the
+    // panel selects that analysis from the session row alone.
+    const { props, instance } = makeProps({
+      session: 'sx', sessionIds: ['sx'],
+      byId: { sx: { cwd: '/ws/LLMPWA/analyses/kk_pipi' } },
+    })
+    instance.actions.opened()
+    instance.actions.listed([{ dir: 'kk_dis' }, { dir: 'kk_pipi' }])
+    instance.actions.agentSessionsLoaded({})
+    render(<Workbench {...props} />)
+    expect(instance.getSnapshot().selected).toBe('kk_pipi')
+  })
+
+  it('keeps a manual list pick over the auto-select for the same session', () => {
+    // A manual pick after an auto-select within one open wins: selecting a
+    // different analysis by hand must not be reverted by the follow effect.
+    const { props, instance } = makeProps({
+      session: 'sx', sessionIds: ['sx'],
+      byId: { sx: { cwd: '/ws/LLMPWA/analyses/kk_dis' } },
+    })
+    instance.actions.opened()
+    instance.actions.listed([{ dir: 'kk_dis' }, { dir: 'kk_pipi' }])
+    instance.actions.agentSessionsLoaded({})
+    render(<Workbench {...props} />)
+    // Auto-select resolves to kk_dis through the session cwd.
+    expect(instance.getSnapshot().selected).toBe('kk_dis')
+    // A manual pick switches to another analysis and stays there.
+    fireEvent.click(screen.getByRole('button', { name: 'kk_pipi' }))
+    expect(instance.getSnapshot().selected).toBe('kk_pipi')
+  })
+
+  it('re-syncs to the conversation session analysis when reopened', () => {
+    // Close and reopen while the conversation session still maps to an
+    // analysis: the panel must re-derive the selection rather than keep a
+    // stale one from the previous open.
+    const { props, instance } = makeProps({
+      session: 'sx', sessionIds: ['sx'],
+      byId: { sx: { cwd: '/ws/LLMPWA/analyses/kk_dis' } },
+    })
+    instance.actions.opened()
+    instance.actions.listed([{ dir: 'kk_dis' }, { dir: 'kk_pipi' }])
+    instance.actions.agentSessionsLoaded({})
+    const { unmount } = render(<Workbench {...props} />)
+    expect(instance.getSnapshot().selected).toBe('kk_dis')
+    // Manual pick, then close: closing clears the auto-sync marker.
+    fireEvent.click(screen.getByRole('button', { name: 'kk_pipi' }))
+    expect(instance.getSnapshot().selected).toBe('kk_pipi')
+    act(() => { instance.actions.closed() })
+    // Reopen: the follow effect resets and re-derives from the session cwd.
+    act(() => { instance.actions.opened() })
+    expect(instance.getSnapshot().selected).toBe('kk_dis')
+    unmount()
   })
 })

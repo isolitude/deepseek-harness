@@ -47,6 +47,16 @@
   margin: 0;
 }
 
+/* Assistant markdown: the GFM renderer emits its own block rhythm, so the
+   plain-text `pre-wrap`/`word-break` of `.text` would collapse or repurpose
+   its layout — the markdown body uses the shared renderer styling instead. */
+.markdown {
+  color: var(--dsw-alias-label-primary);
+  font: var(--dsw-font-s-strong-14);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .cwd {
   color: var(--dsw-alias-label-tertiary);
   font-family: var(--dsw-font-mono);

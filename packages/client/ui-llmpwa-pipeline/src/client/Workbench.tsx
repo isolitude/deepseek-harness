@@ -13,10 +13,13 @@
  */
 import { useEffect, useMemo, useRef } from 'react'
 import type { ReactNode } from 'react'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { InjectFace, PropsLocale, PropsRenderSlots, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { PropsStore } from '@deepseek-ai/dsh-client-store'
+import { writeClipboard } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { WorkbenchInjected } from './face.ts'
 import {
+  analysisForSession,
   analysisWorkspaceCwd,
   missingSnapshotHint,
   type Analysis,
@@ -89,6 +92,11 @@ export function Workbench(props: WorkbenchOverlayProps): ReactNode {
   const readSessionId = readWorkspace?.sessionIds[0]
   const workspacePath = readWorkspace?.path
 
+  // The panel is a live slot that stays mounted, so `open` flips rather than
+  // remounting. Track the conversation session id whose analysis we last
+  // auto-selected, so a manual list pick in one open wins while a reopen (or a
+  // main-chat session change) re-syncs. Cleared whenever the panel closes.
+  const autoSyncedFor = useRef<SessionId | undefined>(undefined)
   const listController = useRef<AbortController | undefined>(undefined)
   const snapshotController = useRef<AbortController | undefined>(undefined)
   const refsController = useRef<AbortController | undefined>(undefined)
@@ -165,6 +173,40 @@ export function Workbench(props: WorkbenchOverlayProps): ReactNode {
     props.listReferences(readSessionId, selected, controller.signal)
     return () => controller.abort()
   }, [open, readSessionId, selected, props.listReferences])
+
+  // Follow the main conversation: when the current session maps to one of the
+  // listed analyses (its agent session), switch the panel to that analysis. The
+  // mapping is the restored `agentSessions` table (analysis dir → session id)
+  // plus a cwd match against the session list for an analysis whose mapping has
+  // not been restored yet. A manual list pick within one open wins until the
+  // session changes, so reopening the panel after selecting an analysis session
+  // in the main conversation lands on that analysis.
+  useEffect(() => {
+    if (!open) {
+      // Reset the session we auto-synced for so the next open re-derives from
+      // the (possibly different) conversation session.
+      autoSyncedFor.current = undefined
+      return
+    }
+    if (readSessionId === undefined || workspacePath === undefined) return
+    const match = analysisForSession(sessionId, workspacePath, analyses, agentSessions, sessionsById)
+    if (match === undefined) return
+    // A manual list pick within the same open wins: once a session has been
+    // auto-synced and the user picks a different analysis, leave it alone.
+    if (match !== selected && autoSyncedFor.current === sessionId) return
+    autoSyncedFor.current = sessionId
+    if (match !== selected) props.actions.selected(match)
+  }, [
+    open,
+    readSessionId,
+    workspacePath,
+    sessionId,
+    selected,
+    analyses,
+    agentSessions,
+    sessionsById,
+    props.actions,
+  ])
 
   const dag = useMemo(() => {
     if (snapshot.kind !== 'ready') return undefined
@@ -416,6 +458,12 @@ function docsView(
             className={css.refButton}
             data-selected={ref.path === selectedPath}
             onClick={() => select(ref.path)}
+            onContextMenu={(event) => {
+              // Right-click copies the workspace-relative path of the file.
+              event.preventDefault()
+              void writeClipboard(ref.path)
+            }}
+            title={ref.path}
           >
             {ref.name}
           </button>
@@ -505,7 +553,6 @@ function agentDrawer(
         {agent.kind === 'ready'
           ? (
             <div className={css.drawerReady}>
-              <p className={css.errorLine}>{t('panel.drawerAgentReady')}</p>
               {/* The drawer renders only after a workspace path and a selection
                  * resolve, so the analysis cwd is always known here. */}
               <pre className={css.hint}>{cwd as string}</pre>
