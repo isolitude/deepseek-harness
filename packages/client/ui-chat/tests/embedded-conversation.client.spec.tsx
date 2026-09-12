@@ -1,12 +1,22 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { ChatSnapshot } from '../src/client/contract/snapshot.ts'
 import type { EmbeddedConversationProps } from '../src/client/contract/slots.ts'
 import { EmbeddedConversation } from '../src/client/embedded/EmbeddedConversation.tsx'
 
-afterEach(() => cleanup())
+afterEach(() => { cleanup() })
+
+// jsdom has no scrollIntoView; the view calls it to pin the newest text.
+const scrollIntoViewStub = vi.fn()
+beforeEach(() => {
+  Element.prototype.scrollIntoView = scrollIntoViewStub
+})
+afterEach(() => {
+  scrollIntoViewStub.mockReset()
+})
+
 
 /** Build a full props value with the plain stub hooks the component consumes. */
 function makeProps(options: {
@@ -15,12 +25,14 @@ function makeProps(options: {
   running?: boolean
   draft?: string
   cwd?: string
-} = {}): EmbeddedConversationProps {
+} = {}): EmbeddedConversationProps & { readonly setDraft: ReturnType<typeof vi.fn>; readonly submit: ReturnType<typeof vi.fn> } {
   const order = options.order ?? []
   const nodes = options.nodes ?? {}
   const running = options.running ?? false
   const draft = options.draft ?? ''
   const cwd = options.cwd
+  const setDraft = vi.fn()
+  const submit = vi.fn()
   const snapshot = { order } as unknown as ChatSnapshot
   const useChat = ((sel: (snapshot: ChatSnapshot) => unknown) => sel(snapshot)) as EmbeddedConversationProps['useChat']
   const useChatNode = ((key: string) => nodes[key]) as EmbeddedConversationProps['useChatNode']
@@ -35,9 +47,11 @@ function makeProps(options: {
     useSession,
     useInput,
     useSessions,
-    inputActions: { setDraft: vi.fn(), submit: vi.fn() },
+    inputActions: { setDraft, submit },
     t: (key: string) => key,
-  } as unknown as EmbeddedConversationProps
+    setDraft,
+    submit,
+  } as unknown as EmbeddedConversationProps & { readonly setDraft: ReturnType<typeof vi.fn>; readonly submit: ReturnType<typeof vi.fn> }
 }
 
 describe('EmbeddedConversation', () => {
@@ -117,15 +131,8 @@ describe('EmbeddedConversation', () => {
   })
 
   it('scrolls the transcript to the newest text when it can', () => {
-    const scrollIntoView = vi.fn()
-    const original = Element.prototype.scrollIntoView
-    Element.prototype.scrollIntoView = scrollIntoView
-    try {
-      render(<EmbeddedConversation {...makeProps({ order: ['k1'] })} />)
-      expect(scrollIntoView).toHaveBeenCalledWith({ block: 'end' })
-    } finally {
-      Element.prototype.scrollIntoView = original
-    }
+    render(<EmbeddedConversation {...makeProps({ order: ['k1'] })} />)
+    expect(scrollIntoViewStub).toHaveBeenCalledWith({ block: 'end' })
   })
 
   it('shows the working directory when the session has one', () => {
@@ -135,7 +142,7 @@ describe('EmbeddedConversation', () => {
 
   it('sends the draft through the input machine', () => {
     const props = makeProps({ draft: 'hi' })
-    const submit = props.inputActions.submit as ReturnType<typeof vi.fn>
+    const { submit } = props
     render(<EmbeddedConversation {...props} />)
     const submitButton = screen.getByRole('button', { name: 'embedded.send' })
     expect(submitButton).toHaveProperty('disabled', false)
@@ -145,7 +152,7 @@ describe('EmbeddedConversation', () => {
 
   it('does not send when the draft is blank', () => {
     const props = makeProps({ draft: '   ' })
-    const submit = props.inputActions.submit as ReturnType<typeof vi.fn>
+    const { submit } = props
     render(<EmbeddedConversation {...props} />)
     fireEvent.click(screen.getByRole('button', { name: 'embedded.send' }))
     expect(submit).not.toHaveBeenCalled()
@@ -153,7 +160,7 @@ describe('EmbeddedConversation', () => {
 
   it('types into the composer and updates the shared draft', () => {
     const props = makeProps({ draft: '' })
-    const setDraft = props.inputActions.setDraft as ReturnType<typeof vi.fn>
+    const { setDraft } = props
     render(<EmbeddedConversation {...props} />)
     const textarea = screen.getByPlaceholderText('embedded.placeholder') as HTMLTextAreaElement
     fireEvent.change(textarea, { target: { value: 'typed' } })
@@ -162,7 +169,7 @@ describe('EmbeddedConversation', () => {
 
   it('submits on Enter but not on Shift+Enter or other keys', () => {
     const props = makeProps({ draft: 'hi' })
-    const submit = props.inputActions.submit as ReturnType<typeof vi.fn>
+    const { submit } = props
     render(<EmbeddedConversation {...props} />)
     const textarea = screen.getByPlaceholderText('embedded.placeholder') as HTMLTextAreaElement
     fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false })
@@ -175,7 +182,7 @@ describe('EmbeddedConversation', () => {
 
   it('does not submit from the key handler when the draft is blank', () => {
     const props = makeProps({ draft: '' })
-    const submit = props.inputActions.submit as ReturnType<typeof vi.fn>
+    const { submit } = props
     render(<EmbeddedConversation {...props} />)
     const textarea = screen.getByPlaceholderText('embedded.placeholder') as HTMLTextAreaElement
     fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false })

@@ -14,10 +14,9 @@ Provider 源码：[`packages/remote/remote/src/types.ts`](../../packages/remote/
 
 ```ts type-equiv
 /**
- * How this connection authenticates. Exactly one materialized form — the tool
- * layer resolves configuration references (key files, credential refs) into
- * these values, so the provider never sees a credential name and no secret
- * enters a tool argument.
+ * How this connection authenticates. Exactly one materialized form — the tool layer
+ * resolves configuration references (key files, credential refs) into these values, so
+ * the provider never sees a credential name and no secret enters a tool argument.
  */
 type RemoteAuth =
   /** SSH private key on the local host; the provider reads the file. */
@@ -30,9 +29,8 @@ type RemoteAuth =
 
 ```ts type-equiv
 /**
- * One fully-resolved remote connection for a single call. Built by the tool
- * layer from the per-analysis `.dsh/config.yml`; identity fields are immutable
- * per call.
+ * One fully-resolved remote connection for a single call. Built by the tool layer from
+ * the per-analysis `.dsh/config.yml`; identity fields are immutable per call.
  */
 interface RemoteConnection {
   /** Stable per-analysis handle the provider keys its connection cache on. */
@@ -53,6 +51,11 @@ interface RemoteConnection {
   readonly maxTransferBytes: number
   /** Expected host-key SHA256 fingerprint (base64, no prefix); absent = strict default refuses. */
   readonly hostKeyFingerprint?: string
+  /**
+   * Optional SSH jump (bastion) host the provider tunnels through before connecting to
+   * the target; each hop verifies its own host key and authenticates independently.
+   */
+  readonly proxyJump?: RemoteJumpHost
 }
 ```
 

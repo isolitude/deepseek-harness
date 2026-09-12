@@ -75,22 +75,22 @@ const DOCUMENT_DIR = 'document'
  */
 export interface WorkspaceFilesLoadRemote {
   readonly workspaceFiles: {
-    list(
+    list: (
       sessionId: SessionId,
       path: string,
       signal?: AbortSignal,
-    ): Promise<RemoteResult<{ readonly entries: readonly WorkspaceDirectoryEntry[] }>>
-    read(
+    ) => Promise<RemoteResult<{ readonly entries: readonly WorkspaceDirectoryEntry[] }>>
+    read: (
       sessionId: SessionId,
       path: string,
       range: WorkspaceFileRange,
       signal?: AbortSignal,
-    ): Promise<RemoteResult<WorkspaceFileText>>
-    write(
+    ) => Promise<RemoteResult<WorkspaceFileText>>
+    write: (
       sessionId: SessionId,
       request: WorkspaceFileWriteRequest,
       signal?: AbortSignal,
-    ): Promise<RemoteResult<WorkspaceFileWrite>>
+    ) => Promise<RemoteResult<WorkspaceFileWrite>>
   }
 }
 

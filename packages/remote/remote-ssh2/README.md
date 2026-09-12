@@ -116,7 +116,7 @@ No direct invalidation; the tool package owns request-prefix changes.
 - **SFTP-level atomicity** — a remote publish depends on the server honoring same-directory `rename` atomically; cross-filesystem renames are up to the server.
 - **No interactive PTY** — commands run to completion; interactive prompts require a terminal backend, out of scope here.
 
-## Dev Note
+### Dev Note
 
 <details>
 <summary>Working context for maintainers — click to expand</summary>

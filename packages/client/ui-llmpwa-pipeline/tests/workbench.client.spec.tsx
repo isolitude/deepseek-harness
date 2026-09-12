@@ -57,14 +57,14 @@ function makeProps(options: {
   const newAgent = vi.fn()
   const session = 'session' in options ? options.session : 's1'
   const sessionIds = 'sessionIds' in options
-    ? options.sessionIds!
+    ? options.sessionIds
     : (session === undefined ? [] : [session])
-  const running = 'running' in options ? options.running! : []
+  const running = 'running' in options ? options.running : []
   const props = {
     // A reactive store seat so store-mutating actions re-render the panel, as
     // the slot runtime's observableHook does.
     useStore: (sel: (s: ReturnType<typeof instance.getSnapshot>) => unknown) =>
-      useSyncExternalStore(instance.subscribe, () => sel(instance.getSnapshot())),
+      useSyncExternalStore(listener => instance.subscribe(listener), () => sel(instance.getSnapshot())),
     useSessions: (sel: (s: {
       current: string | undefined
       byId: Record<string, { running?: boolean; cwd?: string }>

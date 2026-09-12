@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-`dsh-tool-remote` gives the agent a set of remote SSH tools — `remote_exec`, `remote_read`, `remote_write`, `remote_edit`, `remote_push`, and `remote_pull` — that run commands and transfer files on a remote server configured per analysis. Each tool resolves the calling session's nearest `.dsh/config.yml` (walking up from the session working directory), builds a fully-explicit connection, and delegates to the mounted `ctx.remote` provider. `remote_push` uploads a local file to the server (to ship scripts), `remote_pull` downloads a remote file back (to collect experiment results), and the file tools operate atomically with bounded output. Choose this package together with `dsh-remote-ssh2` when an analysis's agent needs both local execution and a remote execution world.
+`dsh-tool-remote` gives the agent remote SSH tools — `remote_exec`, `remote_read`, `remote_write`, `remote_edit`, `remote_push`, `remote_pull` — that run commands and transfer files on a remote server configured per analysis. Each tool resolves the nearest `.dsh/config.yml` from the session directory, builds a fully-explicit connection, and delegates to the mounted `ctx.remote` provider. `remote_push` uploads local files (to ship scripts); `remote_pull` downloads them back (to collect results); file tools operate atomically with bounded output. Choose it with `dsh-remote-ssh2` when an analysis needs both local and remote execution.
 
 ## Table of Contents
 
@@ -208,7 +208,7 @@ Append-only; results follow the reusable request prefix.
 - **Configuration-driven hosts only** — the remote host comes from the analysis `.dsh/config.yml`; there is no per-call host override (a deliberate policy default).
 - **No inventory tool** — listing remote directories is left to `remote_exec`; the seam and tools address individual files.
 
-## Dev Note
+### Dev Note
 
 <details>
 <summary>Working context for maintainers — click to expand</summary>

@@ -86,11 +86,13 @@ kind: "package-reference"
 
 ## 已知限制与延期工作
 
+<a id="known-limitations-and-deferred-work"></a>
+
 - **单文件传输** — `push`/`pull` 恰好流式传输一个文件；递归目录传输超出范围（当前用 `remote_exec` 配合 `tar`）。
 - **无远程列表原语** — `readText`/`writeText`/`editText` 定位单个文件；远程世界的目录发现留给消费方。
 - **无交互词汇** — 该接缝把命令运行到完成；交互式终端会话超出范围。
 
-## 开发备注
+### 开发备注
 
 <details>
 <summary>维护者工作上下文 — 点击展开</summary>

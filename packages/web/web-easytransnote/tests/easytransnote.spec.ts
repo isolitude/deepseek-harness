@@ -15,6 +15,13 @@ const base = {
   fetchModel: 'web-fetch-lite',
 }
 
+/** `base` without the literal `apiKey`, for resolver-based credential tests. */
+const baseNoKey = {
+  baseURL: base.baseURL,
+  searchModel: base.searchModel,
+  fetchModel: base.fetchModel,
+}
+
 const searchProvider = (options: EasyTransnoteProviderOptions): EasyTransnoteSearchProvider =>
   new EasyTransnoteSearchProvider(() => options)
 
@@ -95,11 +102,11 @@ describe('available', () => {
   })
 
   it('is unavailable without a key or resolver', () => {
-    expect(searchProvider({ ...base, apiKey: '', resolveApiKey: undefined }).available()).toBe(false)
+    expect(searchProvider({ ...base, apiKey: '' }).available()).toBe(false)
   })
 
   it('is available through a resolver', () => {
-    const options = { ...base, apiKey: undefined, resolveApiKey: async () => 'resolved' }
+    const options = { ...baseNoKey, resolveApiKey: async () => 'resolved' }
     expect(searchProvider(options).available()).toBe(true)
   })
 })
@@ -111,12 +118,12 @@ describe('search request', () => {
     const result = await searchProvider(base).search({ query: 'latest AI' })
     expect(result.content).toBe('answer')
     expect(result.sources).toEqual([{ url: 'https://a.test' }])
-    const [url, init] = fetchMock.mock.calls[0]!
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
     expect(url).toBe('https://api.easytransnote.test/beta/v1/web/search')
     expect(init.method).toBe('POST')
     expect(init.redirect).toBe('error')
     expect(init.headers).toMatchObject({ authorization: 'Bearer et-key', 'content-type': 'application/json' })
-    expect(JSON.parse(init.body)).toEqual({ model: 'web-search-base', topic: 'latest AI' })
+    expect(JSON.parse(init.body as string)).toEqual({ model: 'web-search-base', topic: 'latest AI' })
   })
 
   it('fails loud on a non-2xx response', async () => {
@@ -135,7 +142,7 @@ describe('search request', () => {
   })
 
   it('throws WEB_PROVIDER_CREDENTIAL_MISSING when no key resolves', async () => {
-    const options = { ...base, apiKey: undefined, resolveApiKey: async () => undefined }
+    const options = { ...baseNoKey, resolveApiKey: async () => undefined }
     const error = await rejectedWebError(searchProvider(options).search({ query: 'q' }))
     expect(error.code).toBe('WEB_PROVIDER_CREDENTIAL_MISSING')
   })
@@ -152,11 +159,11 @@ describe('fetch request', () => {
       body: { kind: 'text', content: '# content' },
       truncated: false,
     })
-    const [url, init] = fetchMock.mock.calls[0]!
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
     expect(url).toBe('https://api.easytransnote.test/beta/v1/web/fetch')
     expect(init.redirect).toBe('error')
     expect(init.headers).toMatchObject({ authorization: 'Bearer et-key' })
-    expect(JSON.parse(init.body)).toEqual({ model: 'web-fetch-lite', url: 'https://en.wikipedia.org/wiki/AI' })
+    expect(JSON.parse(init.body as string)).toEqual({ model: 'web-fetch-lite', url: 'https://en.wikipedia.org/wiki/AI' })
   })
 
   it('surfaces a malformed body as WEB_PROVIDER_ERROR', async () => {

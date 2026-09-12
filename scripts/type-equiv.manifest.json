@@ -2191,6 +2191,17 @@
       "doc": "docs/subsystems/deliverables.md",
       "symbol": "WorkspaceChanges",
       "source": "packages/deliverables/workspace-changes/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/remote.md",
+      "symbol": "RemoteAuth",
+      "source": "packages/remote/remote/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/remote.md",
+      "symbol": "RemoteConnection",
+      "source": "packages/remote/remote/src/types.ts"
+
     }
   ]
 }

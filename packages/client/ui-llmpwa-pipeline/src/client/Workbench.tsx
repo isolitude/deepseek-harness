@@ -151,7 +151,7 @@ export function Workbench(props: WorkbenchOverlayProps): ReactNode {
     const controller = new AbortController()
     listController.current = controller
     props.listAnalyses(workspacePath, readSessionId, controller.signal)
-    return () => controller.abort()
+    return () => { controller.abort() }
   }, [open, readSessionId, props.listAnalyses])
 
   // Load the selected analysis's snapshot when a selection is active.
@@ -161,7 +161,7 @@ export function Workbench(props: WorkbenchOverlayProps): ReactNode {
     const controller = new AbortController()
     snapshotController.current = controller
     props.loadSnapshot(readSessionId, selected, controller.signal)
-    return () => controller.abort()
+    return () => { controller.abort() }
   }, [open, readSessionId, selected, props.loadSnapshot])
 
   // List the selected analysis's reference files when a selection is active.
@@ -171,7 +171,7 @@ export function Workbench(props: WorkbenchOverlayProps): ReactNode {
     const controller = new AbortController()
     refsController.current = controller
     props.listReferences(readSessionId, selected, controller.signal)
-    return () => controller.abort()
+    return () => { controller.abort() }
   }, [open, readSessionId, selected, props.listReferences])
 
   // Follow the main conversation: when the current session maps to one of the
@@ -233,7 +233,7 @@ export function Workbench(props: WorkbenchOverlayProps): ReactNode {
               {props.t('panel.openAgent')}
             </button>
             : null}
-          <button type="button" className={css.close} onClick={() => props.actions.closed()}>
+          <button type="button" className={css.close} onClick={() => { props.actions.closed() }}>
             {props.t('panel.close')}
           </button>
         </div>
@@ -265,7 +265,7 @@ export function Workbench(props: WorkbenchOverlayProps): ReactNode {
                     type="button"
                     className={css.analysis}
                     data-selected={analysis.dir === selected}
-                    onClick={() => props.actions.selected(analysis.dir)}
+                    onClick={() => { props.actions.selected(analysis.dir) }}
                   >
                     {analysis.dir}
                   </button>
@@ -290,7 +290,7 @@ export function Workbench(props: WorkbenchOverlayProps): ReactNode {
                       type="button"
                       className={css.tab}
                       data-active={view === tab.id}
-                      onClick={() => props.actions.setView(tab.id)}
+                      onClick={() => { props.actions.setView(tab.id) }}
                     >
                       {props.t(tab.labelKey)}
                     </button>
@@ -308,14 +308,14 @@ export function Workbench(props: WorkbenchOverlayProps): ReactNode {
                        * collapses it to a title strip so the DAG stays visible.
                        * The panel itself sits above this backdrop. */}
                       {!agentCollapsed
-                        ? <div className={css.drawerBackdrop} onClick={() => props.actions.agentCollapse()} />
+                        ? <div className={css.drawerBackdrop} onClick={() => { props.actions.agentCollapse() }} />
                         : null}
                       {agentCollapsed
                         ? <button
                           type="button"
                           className={css.drawerStrip}
                           data-testid="llmpwa-agent-strip"
-                          onClick={() => props.actions.agentExpand()}
+                          onClick={() => { props.actions.agentExpand() }}
                         >
                           {props.t('panel.drawerTitle')}
                         </button>
@@ -323,13 +323,13 @@ export function Workbench(props: WorkbenchOverlayProps): ReactNode {
                           agent,
                           props.t,
                           openAgent,
-                          () => props.actions.closed(),
-                          () => props.actions.agentClosed(),
+                          () => { props.actions.closed() },
+                          () => { props.actions.agentClosed() },
                           agentCwd,
                           sessionId,
                           props.renderSlot,
                           drawerWidth,
-                          () => props.actions.agentCollapse(),
+                          () => { props.actions.agentCollapse() },
                           newAgentSession,
                           beginResize,
                           resize,
@@ -457,7 +457,7 @@ function docsView(
             type="button"
             className={css.refButton}
             data-selected={ref.path === selectedPath}
-            onClick={() => select(ref.path)}
+            onClick={() => { select(ref.path) }}
             onContextMenu={(event) => {
               // Right-click copies the workspace-relative path of the file.
               event.preventDefault()
@@ -490,7 +490,7 @@ function referencePreview(
     return (
       <div className={css.error}>
         <p className={css.errorLine}>{t('panel.error.reference')} {reference.error.message}</p>
-        <button type="button" className={css.refresh} onClick={() => select(reference.path)}>
+        <button type="button" className={css.refresh} onClick={() => { select(reference.path) }}>
           {t('panel.error.retry')}
         </button>
       </div>

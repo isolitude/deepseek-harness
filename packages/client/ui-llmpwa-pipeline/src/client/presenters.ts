@@ -206,8 +206,8 @@ export function buildDag(
  */
 export function buildParamRows(params: readonly ParamDecl[]): readonly ParamRow[] {
   return params.map(p => ({
-    resonance: String(p.kind ?? ''),
-    path: String(p.path ?? ''),
+    resonance: p.kind ?? '',
+    path: p.path ?? '',
     value: formatValue(p.value),
     fixed: p.fixed === true,
     range: formatValue(p.range),
@@ -222,8 +222,28 @@ export function buildParamRows(params: readonly ParamDecl[]): readonly ParamRow[
  */
 export function formatValue(value: unknown): string {
   if (value === null || value === undefined) return '—'
-  if (Array.isArray(value)) return `[${value.map(v => String(v)).join(', ')}]`
-  return String(value)
+  if (Array.isArray(value)) return `[${value.map(item => stringifyScalar(item)).join(', ')}]`
+  return stringifyScalar(value)
+}
+
+/**
+ * Stringify one array element or scalar for the parameters table. Objects
+ * (including arrays, handled by the caller) JSON-serialize; everything else
+ * formats as itself.
+ * @param item - the element to format.
+ * @returns a short display string.
+ */
+function stringifyScalar(item: unknown): string {
+  // The value is JSON-derived (from the exporter snapshot); only JSON
+  // primitives (string, number, boolean) reach the final arm. The object and
+  // function arms keep JSON round-tripping for the nested cases.
+  if (item === null) return 'null'
+  if (typeof item === 'object') return JSON.stringify(item)
+  if (typeof item === 'function') return '[function]'
+  if (typeof item === 'string' || typeof item === 'number' || typeof item === 'boolean') {
+    return String(item)
+  }
+  return '[value]'
 }
 
 /**

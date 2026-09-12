@@ -90,7 +90,7 @@ No direct invalidation; the tool package owns request-prefix changes.
 - **No remote listing primitive** — `readText`/`writeText`/`editText` address individual files; directory discovery on the remote world is left to the consumer.
 - **No interactive vocabulary** — the seam runs a command to completion; interactive terminal sessions are out of scope.
 
-## Dev Note
+### Dev Note
 
 <details>
 <summary>Working context for maintainers — click to expand</summary>

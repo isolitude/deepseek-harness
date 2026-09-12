@@ -10,7 +10,7 @@ import { isMarkdownReference, referenceLang, ReferenceDocument } from '../src/cl
 
 const t = (key: string): string => key
 
-afterEach(() => cleanup())
+afterEach(() => { cleanup() })
 
 describe('ReferenceDocument', () => {
   it('renders markdown files through the GFM renderer', () => {

@@ -112,11 +112,13 @@ keepalive 默认开启：每条连接每 `keepaliveIntervalMs` 发送一个 SSH 
 
 ## 已知限制与延期工作
 
+<a id="known-limitations-and-deferred-work"></a>
+
 - **无递归传输** — `push`/`pull` 恰好处理一个文件；目录请用 `remote_exec` 配合 `tar`。
 - **SFTP 级原子性** — 远程发布依赖服务器在相同目录内原子地执行 `rename`；跨文件系统重命名取决于服务器。
 - **无交互式 PTY** — 命令运行到完成；交互式提示需要终端后端，此处超范围。
 
-## 开发备注
+### 开发备注
 
 <details>
 <summary>维护者工作上下文 — 点击展开</summary>

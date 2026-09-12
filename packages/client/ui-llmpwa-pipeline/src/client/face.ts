@@ -157,6 +157,10 @@ export function workbenchFace(
             ?? sessionForAnalysis(byId, workspacePath, analysis.dir)
           if (id !== undefined) restored[analysis.dir] = id
         }
+        // The top-level guard narrowed `signal.aborted` here, but the caller can
+        // abort while the face's awaits pend, so the re-check before settling is
+        // required; oxlint's closure narrowing overreads the property.
+        // oxlint-disable-next-line typescript/no-unnecessary-condition -- the caller can abort during the awaited list.
         if (signal.aborted) return
         actions.agentSessionsLoaded(restored)
       })

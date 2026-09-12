@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-`dsh-tool-remote` 为 agent 提供一组远程 SSH 工具——`remote_exec`、`remote_read`、`remote_write`、`remote_edit`、`remote_push` 与 `remote_pull`——在按 analysis 配置的远程服务器上运行命令与传输文件。每个工具解析调用方会话最近的 `.dsh/config.yml`（从会话工作目录向上查找），构建完全显式的连接，并委托给已挂载的 `ctx.remote` 后端。`remote_push` 上传本地文件到服务器（发送脚本），`remote_pull` 把远程文件下载回来（回收实验结果），文件工具有界输出且原子运行。当 analysis 的 agent 既要本地执行世界又要远程执行世界时，把本包与 `dsh-remote-ssh2` 一起选用。
+`dsh-tool-remote` 为 agent 提供远程 SSH 工具——`remote_exec`、`remote_read`、`remote_write`、`remote_edit`、`remote_push` 与 `remote_pull`——在按 analysis 配置的远程服务器上运行命令与传输文件。每个工具解析会话目录最近的 `.dsh/config.yml`，构建完全显式的连接，并委托给已挂载的 `ctx.remote` 后端。`remote_push` 上传本地文件（发送脚本），`remote_pull` 下载远程文件回本地（回收结果），文件工具有界输出且原子运行。当 analysis 需要本地与远程执行时，把本包与 `dsh-remote-ssh2` 一起选用。
 
 ## 目录
 
@@ -204,11 +204,13 @@ Use the remote_* tools to execute commands and transfer files on the analysis's 
 
 ## 已知限制与延期工作
 
+<a id="known-limitations-and-deferred-work"></a>
+
 - **单文件传输** — `remote_push`/`remote_pull` 每次调用处理一个文件；目录传输用 `remote_exec` 配合 `tar`。
 - **仅配置驱动的主机** — 远程主机来自 analysis `.dsh/config.yml`；没有逐调用主机覆盖（有意策略默认）。
 - **无清点工具** — 列出远程目录留给 `remote_exec`；接缝与工具定位单个文件。
 
-## 开发备注
+### 开发备注
 
 <details>
 <summary>维护者工作上下文 — 点击展开</summary>

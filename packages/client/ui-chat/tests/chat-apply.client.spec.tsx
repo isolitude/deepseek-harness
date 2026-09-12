@@ -105,7 +105,7 @@ describe('Chat apply wiring', () => {
     if (row === undefined) throw new Error('embedded conversation entry is missing')
     const face = (row.inject as unknown as (sessionId: SessionId) => {
       keyedHooks: { chatNode: (key: string) => { subscribe: unknown } }
-    })(SID as SessionId)
+    })(SID)
     expect(typeof face.keyedHooks.chatNode('node-1').subscribe).toBe('function')
     await b.runtime.dispose()
   })
@@ -126,7 +126,7 @@ describe('Chat apply wiring', () => {
     if (row === undefined) throw new Error('Chat view entry is missing')
     const face = (row.inject as unknown as (sessionId: SessionId) => {
       keyedHooks: { chatNode: (key: string) => { subscribe: unknown }; chatNodeProcess: (key: string) => { subscribe: unknown } }
-    })(SID as SessionId)
+    })(SID)
     expect(typeof face.keyedHooks.chatNode('node-1').subscribe).toBe('function')
     expect(typeof face.keyedHooks.chatNodeProcess('node-1').subscribe).toBe('function')
     await b.runtime.dispose()

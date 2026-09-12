@@ -8,7 +8,7 @@ import { cleanup, render, screen } from '@testing-library/react'
 import { Dag } from '../src/client/Dag.tsx'
 import type { DagModel } from '../src/client/presenters.ts'
 
-afterEach(() => cleanup())
+afterEach(() => { cleanup() })
 
 const twoLayer: DagModel = {
   nodes: [

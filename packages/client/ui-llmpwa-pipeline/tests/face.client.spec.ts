@@ -24,15 +24,40 @@ function remote(listImpl: unknown, readImpl: unknown, writeImpl?: unknown): Work
   }
 }
 
+/** A scripted `ISessions` mocks the tests assert calls on, via the class idiom that keeps the mock out of method-shorthand land. */
+class FakeSessions {
+  readonly create: ReturnType<typeof vi.fn<ISessions['create']>>
+  readonly open: ReturnType<typeof vi.fn<ISessions['open']>>
+  readonly list = {
+    getSnapshot: (): { readonly ids: readonly string[]; readonly byId: Record<string, unknown> } => ({
+      ids: Object.keys(this.byId),
+      byId: this.byId,
+    }),
+  }
+
+  private readonly byId: Record<string, unknown>
+
+  constructor(createImpl?: () => Promise<SessionId>, byId: Record<string, unknown> = {}) {
+    this.create = vi.fn<ISessions['create']>(createImpl ?? (() => Promise.resolve('sess-1' as SessionId)))
+    this.open = vi.fn<ISessions['open']>(() => {})
+    this.byId = byId
+  }
+}
+
 function makeSessions(
-  createImpl?: () => Promise<unknown>,
+  createImpl?: () => Promise<SessionId>,
   byId: Record<string, unknown> = {},
-): ISessions {
-  return {
-    create: vi.fn(createImpl ?? (() => Promise.resolve('sess-1' as SessionId))),
-    open: vi.fn(),
-    list: { getSnapshot: () => ({ ids: Object.keys(byId), byId }) },
-  } as unknown as ISessions
+): FakeSessions {
+  return new FakeSessions(createImpl, byId)
+}
+
+/**
+ * Feed the scripted fixture to the face at the typed boundary. The class keeps
+ * arrow members so test derefs stay lint-clean; the face consumes the full
+ * `ISessions` contract.
+ */
+function toSessions(sessions: FakeSessions): ISessions {
+  return sessions as unknown as ISessions
 }
 
 describe('workbenchFace', () => {
@@ -45,7 +70,7 @@ describe('workbenchFace', () => {
       }),
     )
     const instance = createWorkbenchStore().create()
-    const face = workbenchFace(r, makeSessions())(instance.actions)
+    const face = workbenchFace(r, toSessions(makeSessions()))(instance.actions)
     face.listAnalyses('/ws', SESSION, new AbortController().signal)
     expect(instance.getSnapshot().listing).toBe(true)
     await tick()
@@ -64,7 +89,7 @@ describe('workbenchFace', () => {
       }),
     )
     const instance = createWorkbenchStore().create()
-    const face = workbenchFace(r, makeSessions())(instance.actions)
+    const face = workbenchFace(r, toSessions(makeSessions()))(instance.actions)
     face.listAnalyses('/ws', SESSION, new AbortController().signal)
     await tick()
     // The mapping is seeded from the analysis's persisted settings file.
@@ -80,7 +105,7 @@ describe('workbenchFace', () => {
       vi.fn().mockImplementation(() => new Promise((resolve) => { resolveRead = resolve })),
     )
     const instance = createWorkbenchStore().create()
-    const face = workbenchFace(r, makeSessions())(instance.actions)
+    const face = workbenchFace(r, toSessions(makeSessions()))(instance.actions)
     const controller = new AbortController()
     face.listAnalyses('/ws', SESSION, controller.signal)
     await tick()
@@ -106,7 +131,7 @@ describe('workbenchFace', () => {
       sx: { cwd: '/ws/LLMPWA/analyses/kk_dis' },
       other: { cwd: '/elsewhere', updatedAt: 99 },
     })
-    const face = workbenchFace(r, sessions)(instance.actions)
+    const face = workbenchFace(r, toSessions(sessions))(instance.actions)
     face.listAnalyses('/ws', SESSION, new AbortController().signal)
     await tick()
     expect(instance.getSnapshot().agentSessions).toEqual({ kk_dis: 'sx' })
@@ -126,7 +151,7 @@ describe('workbenchFace', () => {
       fresh: { cwd: '/ws/LLMPWA/analyses/kk_dis', updatedAt: 30 },
       untimed: { cwd: '/ws/LLMPWA/analyses/kk_dis' },
     })
-    const face = workbenchFace(r, sessions)(instance.actions)
+    const face = workbenchFace(r, toSessions(sessions))(instance.actions)
     face.listAnalyses('/ws', SESSION, new AbortController().signal)
     await tick()
     expect(instance.getSnapshot().agentSessions).toEqual({ kk_dis: 'fresh' })
@@ -141,7 +166,7 @@ describe('workbenchFace', () => {
       }),
     )
     const instance = createWorkbenchStore().create()
-    const face = workbenchFace(r, makeSessions())(instance.actions)
+    const face = workbenchFace(r, toSessions(makeSessions()))(instance.actions)
     face.loadSnapshot(SESSION, 'kk_dis', new AbortController().signal)
     expect(instance.getSnapshot().snapshot).toEqual({ kind: 'loading' })
     await tick()
@@ -154,7 +179,7 @@ describe('workbenchFace', () => {
       vi.fn().mockResolvedValue({ ok: false, error: { code: 'workspace-file/not-found', message: 'gone' } }),
     )
     const instance = createWorkbenchStore().create()
-    const face = workbenchFace(r, makeSessions())(instance.actions)
+    const face = workbenchFace(r, toSessions(makeSessions()))(instance.actions)
     face.loadSnapshot(SESSION, 'kk_dis', new AbortController().signal)
     await tick()
     expect(instance.getSnapshot().snapshot).toMatchObject({ kind: 'failed', error: { kind: 'missing' } })
@@ -163,7 +188,7 @@ describe('workbenchFace', () => {
   it('does not start a list read when the signal is already aborted', () => {
     const r = remote(vi.fn().mockResolvedValue({ ok: true, value: { entries: [] } }), vi.fn())
     const instance = createWorkbenchStore().create()
-    const face = workbenchFace(r, makeSessions())(instance.actions)
+    const face = workbenchFace(r, toSessions(makeSessions()))(instance.actions)
     const controller = new AbortController()
     controller.abort()
     face.listAnalyses('/ws', SESSION, controller.signal)
@@ -174,7 +199,7 @@ describe('workbenchFace', () => {
   it('does not start a snapshot read when the signal is already aborted', () => {
     const r = remote(vi.fn(), vi.fn().mockResolvedValue({ ok: true, value: {} }))
     const instance = createWorkbenchStore().create()
-    const face = workbenchFace(r, makeSessions())(instance.actions)
+    const face = workbenchFace(r, toSessions(makeSessions()))(instance.actions)
     const controller = new AbortController()
     controller.abort()
     face.loadSnapshot(SESSION, 'kk_dis', controller.signal)
@@ -188,7 +213,7 @@ describe('workbenchFace', () => {
       value: { text: 'null', version: 'v1', offset: 1, eof: true, lines: 1 },
     }))
     const instance = createWorkbenchStore().create()
-    const face = workbenchFace(r, makeSessions())(instance.actions)
+    const face = workbenchFace(r, toSessions(makeSessions()))(instance.actions)
     face.loadSnapshot(SESSION, 'kk_dis', new AbortController().signal)
     await tick()
     expect(instance.getSnapshot().snapshot).toMatchObject({ kind: 'failed', error: { kind: 'unexpected' } })
@@ -201,7 +226,7 @@ describe('workbenchFace', () => {
       vi.fn().mockImplementation(() => new Promise((resolve) => { resolveRead = resolve })),
     )
     const instance = createWorkbenchStore().create()
-    const face = workbenchFace(r, makeSessions())(instance.actions)
+    const face = workbenchFace(r, toSessions(makeSessions()))(instance.actions)
     const controller = new AbortController()
     face.loadSnapshot(SESSION, 'kk_dis', controller.signal)
     controller.abort()
@@ -218,7 +243,7 @@ describe('workbenchFace', () => {
       vi.fn(),
     )
     const instance = createWorkbenchStore().create()
-    const face = workbenchFace(r, makeSessions())(instance.actions)
+    const face = workbenchFace(r, toSessions(makeSessions()))(instance.actions)
     const controller = new AbortController()
     face.listAnalyses('/ws', SESSION, controller.signal)
     controller.abort()
@@ -236,12 +261,12 @@ describe('workbenchFace', () => {
       vi.fn(),
     )
     const instance = createWorkbenchStore().create()
-    const face = workbenchFace(r, makeSessions())(instance.actions)
+    const face = workbenchFace(r, toSessions(makeSessions()))(instance.actions)
     face.listReferences(SESSION, 'kk_dis', new AbortController().signal)
     expect(instance.getSnapshot().referencesListing).toBe(true)
     await tick()
     expect(instance.getSnapshot().references).toEqual([
-      { path: `${'LLMPWA/analyses'}/kk_dis/resonances_config.toml`, name: 'resonances_config.toml' },
+      { path: 'LLMPWA/analyses/kk_dis/resonances_config.toml', name: 'resonances_config.toml' },
     ])
     expect(instance.getSnapshot().referencesListing).toBe(false)
   })
@@ -252,7 +277,7 @@ describe('workbenchFace', () => {
       vi.fn().mockResolvedValue({ ok: true, value: { text: '# title', version: 'v1', offset: 1, eof: true, lines: 1 } }),
     )
     const instance = createWorkbenchStore().create()
-    const face = workbenchFace(r, makeSessions())(instance.actions)
+    const face = workbenchFace(r, toSessions(makeSessions()))(instance.actions)
     face.loadReference(SESSION, 'p.toml', new AbortController().signal)
     expect(instance.getSnapshot().reference).toEqual({ kind: 'loading', path: 'p.toml' })
     await tick()
@@ -265,7 +290,7 @@ describe('workbenchFace', () => {
       vi.fn().mockResolvedValue({ ok: false, error: { code: 'workspace-file/not-found', message: 'gone' } }),
     )
     const instance = createWorkbenchStore().create()
-    const face = workbenchFace(r, makeSessions())(instance.actions)
+    const face = workbenchFace(r, toSessions(makeSessions()))(instance.actions)
     face.loadReference(SESSION, 'p.toml', new AbortController().signal)
     await tick()
     expect(instance.getSnapshot().reference).toMatchObject({
@@ -276,7 +301,7 @@ describe('workbenchFace', () => {
   it('does not start a reference list read when the signal is already aborted', () => {
     const r = remote(vi.fn().mockResolvedValue({ ok: true, value: { entries: [] } }), vi.fn())
     const instance = createWorkbenchStore().create()
-    const face = workbenchFace(r, makeSessions())(instance.actions)
+    const face = workbenchFace(r, toSessions(makeSessions()))(instance.actions)
     const controller = new AbortController()
     controller.abort()
     face.listReferences(SESSION, 'kk_dis', controller.signal)
@@ -287,7 +312,7 @@ describe('workbenchFace', () => {
   it('does not start a reference read when the signal is already aborted', () => {
     const r = remote(vi.fn(), vi.fn().mockResolvedValue({ ok: true, value: {} }))
     const instance = createWorkbenchStore().create()
-    const face = workbenchFace(r, makeSessions())(instance.actions)
+    const face = workbenchFace(r, toSessions(makeSessions()))(instance.actions)
     const controller = new AbortController()
     controller.abort()
     face.loadReference(SESSION, 'p.toml', controller.signal)
@@ -303,7 +328,7 @@ describe('workbenchFace', () => {
       vi.fn(),
     )
     const instance = createWorkbenchStore().create()
-    const face = workbenchFace(r, makeSessions())(instance.actions)
+    const face = workbenchFace(r, toSessions(makeSessions()))(instance.actions)
     const controller = new AbortController()
     face.listReferences(SESSION, 'kk_dis', controller.signal)
     controller.abort()
@@ -319,7 +344,7 @@ describe('workbenchFace', () => {
       vi.fn().mockImplementation(() => new Promise((resolve) => { resolveRead = resolve })),
     )
     const instance = createWorkbenchStore().create()
-    const face = workbenchFace(r, makeSessions())(instance.actions)
+    const face = workbenchFace(r, toSessions(makeSessions()))(instance.actions)
     const controller = new AbortController()
     face.loadReference(SESSION, 'p.toml', controller.signal)
     controller.abort()
@@ -333,7 +358,7 @@ describe('workbenchFace', () => {
     const r = remote(vi.fn(), vi.fn(), write)
     const instance = createWorkbenchStore().create()
     const sessions = makeSessions()
-    const face = workbenchFace(r, sessions)(instance.actions)
+    const face = workbenchFace(r, toSessions(sessions))(instance.actions)
     face.openAgent('/ws', SESSION, 'kk_dis')
     expect(instance.getSnapshot().agent).toEqual({ kind: 'opening' })
     expect(sessions.create).toHaveBeenCalledWith({ cwd: '/ws/LLMPWA/analyses/kk_dis' })
@@ -352,7 +377,7 @@ describe('workbenchFace', () => {
     const r = remote(vi.fn(), vi.fn())
     const instance = createWorkbenchStore().create()
     const sessions = makeSessions(undefined, { sx: {} })
-    const face = workbenchFace(r, sessions)(instance.actions)
+    const face = workbenchFace(r, toSessions(sessions))(instance.actions)
     face.openAgent('/ws', SESSION, 'kk_dis', 'sx' as SessionId)
     // No create; the existing session is opened as current and stays recorded.
     expect(sessions.create).not.toHaveBeenCalled()
@@ -366,7 +391,7 @@ describe('workbenchFace', () => {
     const r = remote(vi.fn(), vi.fn())
     const instance = createWorkbenchStore().create()
     const sessions = makeSessions()
-    const face = workbenchFace(r, sessions)(instance.actions)
+    const face = workbenchFace(r, toSessions(sessions))(instance.actions)
     // A recorded id that no longer appears in the session list is stale, so the
     // face creates a new session for the analysis.
     face.openAgent('/ws', SESSION, 'kk_dis', 'stale' as SessionId)
@@ -379,7 +404,7 @@ describe('workbenchFace', () => {
     const r = remote(vi.fn(), vi.fn())
     const instance = createWorkbenchStore().create()
     const sessions = makeSessions(undefined, { sx: {} })
-    const face = workbenchFace(r, sessions)(instance.actions)
+    const face = workbenchFace(r, toSessions(sessions))(instance.actions)
     face.newAgent('/ws', SESSION, 'kk_dis')
     expect(sessions.create).toHaveBeenCalledWith({ cwd: '/ws/LLMPWA/analyses/kk_dis' })
     await tick()
@@ -391,7 +416,7 @@ describe('workbenchFace', () => {
     const r = remote(vi.fn(), vi.fn())
     const instance = createWorkbenchStore().create()
     const sessions = makeSessions(() => Promise.reject(new Error('boom')))
-    const face = workbenchFace(r, sessions)(instance.actions)
+    const face = workbenchFace(r, toSessions(sessions))(instance.actions)
     face.openAgent('/ws', SESSION, 'kk_dis')
     await tick()
     expect(instance.getSnapshot().agent).toMatchObject({ kind: 'failed', error: { message: 'boom' } })
@@ -401,8 +426,8 @@ describe('workbenchFace', () => {
   it('records an agent open failure for a non-Error rejection', async () => {
     const r = remote(vi.fn(), vi.fn())
     const instance = createWorkbenchStore().create()
-    const sessions = makeSessions(() => Promise.reject('gone'))
-    const face = workbenchFace(r, sessions)(instance.actions)
+    const sessions = makeSessions(() => Promise.reject(new Error('gone')))
+    const face = workbenchFace(r, toSessions(sessions))(instance.actions)
     face.openAgent('/ws', SESSION, 'kk_dis')
     await tick()
     expect(instance.getSnapshot().agent).toMatchObject({ kind: 'failed', error: { message: 'gone' } })

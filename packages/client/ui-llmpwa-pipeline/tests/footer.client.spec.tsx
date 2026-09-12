@@ -9,7 +9,7 @@ import { cleanup, render, screen, fireEvent } from '@testing-library/react'
 import { FooterButton, type WorkbenchActionProps } from '../src/client/FooterButton.tsx'
 import { createWorkbenchStore } from '../src/client/store.ts'
 
-afterEach(() => cleanup())
+afterEach(() => { cleanup() })
 
 function makeProps(): { props: WorkbenchActionProps; instance: ReturnType<ReturnType<typeof createWorkbenchStore>['create']> } {
   const instance = createWorkbenchStore().create()
