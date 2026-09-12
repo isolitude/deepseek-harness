@@ -48,15 +48,23 @@ remote:
     kind: key               # key | password | agent
     keyPath: ./.dsh/secrets/id_ed25519
     # passwordRef: LLPWA_<analysis>_SSH_PASSWORD
+  # proxyJump:              # optional: reach compute-1 through a bastion
+  #   host: bastion
+  #   port: 22
+  #   user: deploy
+  #   hostKeyFingerprint: <SHA256 base64 of the jump host key>
+  #   auth:
+  #     kind: key
+  #     keyPath: ./.dsh/secrets/id_ed25519
 ```
 
-工具把 `keyPath` 相对 analysis 目录解析；`passwordRef` 命名一个凭据（环境变量或 `dsh-credentials` 存储），其值绝不进入工具参数、结果或会话日志。无 `auth` 块时默认为 `.dsh/secrets/id_ed25519` 的密钥文件。
+工具把 `keyPath` 相对 analysis 目录解析；`passwordRef` 命名一个凭据（环境变量或 `dsh-credentials` 存储），其值绝不进入工具参数、结果或会话日志。无 `auth` 块时默认为 `.dsh/secrets/id_ed25519` 的密钥文件。可选的 `proxyJump` 块把连接经 SSH 跳板（bastion）主机转发（`ssh -J` 语义）：它独立认证（`key`/`password`/`agent`，默认 analysis 密钥文件），并固定到自己的 `hostKeyFingerprint`，与目标的指纹分开校验。
 
 ### 工具
 
 | 工具 | 参数 | 行为 |
 |---|---|---|
-| `remote_exec` | `command`、`workdir?`、`timeout_ms?` | 运行一条远程 shell 命令；返回 `{ exit_code, signal, stdout, stderr, timed_out }` |
+| `remote_exec` | `command`、`workdir?`、`timeout_ms?` | 运行一条远程 shell 命令并等待其结束；返回 `{ exit_code, signal, stdout, stderr, timed_out }` |
 | `remote_read` | `path`、`offset?`、`limit?` | 带行号的远程文本窗口、总数与截断真值 |
 | `remote_write` | `path`、`content` | 原子创建/替换远程 UTF-8 文本文件 |
 | `remote_edit` | `path`、`old_string`、`new_string`、`replace_all?` | 一次字面量替换；除非 `replace_all`，否则要求唯一匹配 |
@@ -73,6 +81,17 @@ remote:
 | `readLimit` | `2000` | 一次 `remote_read` 返回的默认与最大行数 |
 | `maxTransferBytes` | `268435456` | `remote_push`/`remote_pull` 的默认传输上限 |
 | `workdir` | 配置 `remoteRoot` | `remote_exec` 的默认远程工作目录 |
+
+### 后台运行长命令
+
+`remote_exec` 会把命令运行到完成，仅当远程通道关闭时才返回。要启动一个长任务且不等待，请在远程 shell 后台运行、把它从工具通道中分离，并把输出写入文件：
+
+```bash
+nohup python3 train.py > run.log 2>&1 &
+echo $!
+```
+
+该命令立即返回后台 PID，而任务在后台继续运行。稍后用另一次 `remote_exec` 轮询结果，例如 `tail run.log`，或用 `remote_pull` 把日志文件传回。
 
 -----
 

@@ -28,7 +28,7 @@ The ssh group gives agents remote command execution and file transfer over SSH w
 | [`remote-ssh2`](remote-ssh2/README.md) | Executes the seam over SSH2 with pooled connections, strict host-key verification, and SFTP transfers | registers `ctx.remote` |
 | [`tool-remote`](tool-remote/README.md) | Exposes remote execution and transfer to the model as `remote_exec`/`remote_read`/`remote_write`/`remote_edit`/`remote_push`/`remote_pull` | registers on `ctx.tools` |
 
-A composition mounts one provider (currently `dsh-remote-ssh2`) and the tool package; the tools then resolve each analysis's `.dsh/config.yml` at execution time.
+A composition mounts one provider (currently `dsh-remote-ssh2`) and the tool package; the tools then resolve each analysis's `.dsh/config.yml` at execution time. Per-analysis `remote:` config also supports an optional `proxyJump:` block naming an SSH jump (bastion) host, so a target reachable only through a hop forwards through it (`ssh -J` semantics), with each hop pinned to its own host key.
 
 -----
 

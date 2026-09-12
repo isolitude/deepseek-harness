@@ -379,6 +379,27 @@ describe('config resolution', () => {
     })
   })
 
+  it('carries a materialized proxyJump on every delegated connection', async () => {
+    await withConfig(`auth:
+    kind: agent
+  proxyJump:
+    host: bastion
+    port: 2222
+    user: deploy
+    hostKeyFingerprint: jump-fp
+    auth:
+      kind: agent`)
+    const result = await harness.call('remote_exec', { command: 'ls' })
+    expect(result.isError).toBe(false)
+    expect(harness.calls.runs[0]!.connection.proxyJump).toMatchObject({
+      host: 'bastion',
+      port: 2222,
+      user: 'deploy',
+      hostKeyFingerprint: 'jump-fp',
+      auth: { kind: 'agent' },
+    })
+  })
+
   it('rejects a key-auth block without a keyPath', async () => {
     await withConfig('auth:\n    kind: key')
     const result = await harness.call('remote_exec', { command: 'ls' })

@@ -117,4 +117,66 @@ describe('loadRemoteConnection', () => {
     void conn
     void dirname(configPath)
   })
+
+  it('materializes an optional proxyJump block with its own auth', async () => {
+    const { analysisDir, configPath } = await makeTree()
+    await writeFile(
+      configPath,
+      [
+        'remote:',
+        '  host: h',
+        '  user: u',
+        '  remoteRoot: /r',
+        '  proxyJump:',
+        '    host: bastion',
+        '    port: 2222',
+        '    user: deploy',
+        '    hostKeyFingerprint: jump-fp',
+        '    auth:',
+        '      kind: agent',
+        '',
+      ].join('\n'),
+      'utf8',
+    )
+    const conn = await loadRemoteConnection(new Context(), session(analysisDir) as never)
+    expect(conn!.proxyJump).toMatchObject({ host: 'bastion', port: 2222, user: 'deploy' })
+    expect(conn!.proxyJump!.auth).toEqual({ kind: 'agent' })
+  })
+
+  it('defaults proxyJump port to 22 and auth to the analysis key file', async () => {
+    const { analysisDir, configPath } = await makeTree()
+    await writeFile(
+      configPath,
+      ['remote:', '  host: h', '  user: u', '  remoteRoot: /r', '  proxyJump:', '    host: bastion', '    user: deploy', ''].join('\n'),
+      'utf8',
+    )
+    const conn = await loadRemoteConnection(new Context(), session(analysisDir) as never)
+    expect(conn!.proxyJump).toMatchObject({ host: 'bastion', port: 22, user: 'deploy' })
+    expect(conn!.proxyJump!.auth).toEqual({
+      kind: 'key',
+      keyPath: join(analysisDir, '.dsh', 'secrets', 'id_ed25519'),
+    })
+  })
+
+  it('rejects a proxyJump missing its host', async () => {
+    const { analysisDir, configPath } = await makeTree()
+    await writeFile(
+      configPath,
+      ['remote:', '  host: h', '  user: u', '  remoteRoot: /r', '  proxyJump:', '    user: deploy', ''].join('\n'),
+      'utf8',
+    )
+    await expect(loadRemoteConnection(new Context(), session(analysisDir) as never))
+      .rejects.toMatchObject({ code: 'REMOTE_CONNECT_FAILED' })
+  })
+
+  it('rejects a non-object proxyJump', async () => {
+    const { analysisDir, configPath } = await makeTree()
+    await writeFile(
+      configPath,
+      ['remote:', '  host: h', '  user: u', '  remoteRoot: /r', '  proxyJump: just-a-string', ''].join('\n'),
+      'utf8',
+    )
+    await expect(loadRemoteConnection(new Context(), session(analysisDir) as never))
+      .rejects.toMatchObject({ code: 'REMOTE_CONNECT_FAILED' })
+  })
 })

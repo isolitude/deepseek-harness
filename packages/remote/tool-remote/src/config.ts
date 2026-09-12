@@ -4,7 +4,9 @@
  * `analyses/<analysis>/.dsh/config.yml` declaring a `remote:` block, and turn
  * it into a fully-materialized {@link RemoteConnection}. Credentials resolve
  * here (`keyPath` files are pointed at, `passwordRef` names resolve through
- * `ctx.credentials`) but never enter a tool argument or result surface.
+ * `ctx.credentials`) but never enter a tool argument or result surface. An
+ * optional `proxyJump:` block becomes the connection's jump hop, with its own
+ * auth and host-key fingerprint.
  * @module @deepseek-ai/dsh-tool-remote/config
  */
 
@@ -14,7 +16,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import type { Session } from '@deepseek-ai/dsh-session'
 import { RemoteError } from '@deepseek-ai/dsh-remote'
-import type { RemoteAuth, RemoteConnection } from '@deepseek-ai/dsh-remote'
+import type { RemoteAuth, RemoteConnection, RemoteJumpHost } from '@deepseek-ai/dsh-remote'
 import { parse as parseYaml } from 'yaml'
 /** `remote:` block declared in an analysis `.dsh/config.yml`. */
 export interface RemoteConfigFile {
@@ -26,6 +28,8 @@ export interface RemoteConfigFile {
   auth?: unknown
   /** Expected host-key SHA256 fingerprint (base64). Absent = strict refusal. */
   hostKeyFingerprint?: unknown
+  /** Optional SSH jump (bastion) host block reached before the target. */
+  proxyJump?: unknown
   /** Positive command deadline. Default 60s. */
   timeoutMs?: unknown
   /** Connection-establishment deadline. Default 15s. */
@@ -142,6 +146,31 @@ async function resolveAuth(
   )
 }
 
+/** Resolve an optional `remote.proxyJump:` block into a {@link RemoteJumpHost}. */
+async function resolveProxyJump(
+  ctx: Context,
+  analysisDir: string,
+  proxyJump: unknown,
+): Promise<RemoteJumpHost | undefined> {
+  if (proxyJump === undefined) return undefined
+  if (typeof proxyJump !== 'object' || proxyJump === null) {
+    throw new RemoteError('remote config: proxyJump must be a block with host and user', 'REMOTE_CONNECT_FAILED')
+  }
+  const block = proxyJump as Record<string, unknown>
+  const host = required('remote.proxyJump.host', block['host'])
+  const user = required('remote.proxyJump.user', block['user'])
+  const auth = await resolveAuth(ctx, analysisDir, block['auth'])
+  return {
+    host,
+    port: positiveInteger('remote.proxyJump.port', block['port'], 22),
+    user,
+    auth,
+    ...(typeof block['hostKeyFingerprint'] === 'string' && block['hostKeyFingerprint'].length > 0
+      ? { hostKeyFingerprint: block['hostKeyFingerprint'] }
+      : {}),
+  }
+}
+
 /**
  * Load and materialize the remote connection for the calling session.
  * @param ctx - the plugin context (used for credential resolution).
@@ -177,6 +206,7 @@ export async function loadRemoteConnection(
   const remoteRoot = required('remote.remoteRoot', cfg.remoteRoot)
   const analysisDir = dirname(dirname(configPath))
   const auth = await resolveAuth(ctx, analysisDir, cfg.auth)
+  const proxyJump = await resolveProxyJump(ctx, analysisDir, cfg.proxyJump)
   // The optional command deadline is validated when present; the tool layer
   // resolves it as its own default, so it never rides the connection.
   positiveInteger('remote.timeoutMs', cfg.timeoutMs, Number.NaN)
@@ -192,5 +222,6 @@ export async function loadRemoteConnection(
     ...(typeof cfg.hostKeyFingerprint === 'string' && cfg.hostKeyFingerprint.length > 0
       ? { hostKeyFingerprint: cfg.hostKeyFingerprint }
       : {}),
+    ...(proxyJump !== undefined ? { proxyJump } : {}),
   }
 }

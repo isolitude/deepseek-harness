@@ -23,6 +23,24 @@ export type RemoteAuth =
   | { readonly kind: 'agent' }
 
 /**
+ * A single SSH hop (`ssh -J` / ProxyJump) the provider tunnels through to reach the
+ * target host. It authenticates independently of the target and pins its own host key,
+ * so each hop is verified against its own fingerprint.
+ */
+export interface RemoteJumpHost {
+  /** Jump (bastion) host name or address. */
+  readonly host: string
+  /** Jump port. Defaults to 22 at the tool boundary. */
+  readonly port: number
+  /** Jump user. */
+  readonly user: string
+  /** Materialized authentication for this hop. */
+  readonly auth: RemoteAuth
+  /** Expected jump host-key SHA256 fingerprint (base64, no prefix); absent = strict default refuses. */
+  readonly hostKeyFingerprint?: string
+}
+
+/**
  * One fully-resolved remote connection for a single call. Built by the tool layer from
  * the per-analysis `.dsh/config.yml`; identity fields are immutable per call.
  */
@@ -45,6 +63,11 @@ export interface RemoteConnection {
   readonly maxTransferBytes: number
   /** Expected host-key SHA256 fingerprint (base64, no prefix); absent = strict default refuses. */
   readonly hostKeyFingerprint?: string
+  /**
+   * Optional SSH jump (bastion) host the provider tunnels through before connecting to
+   * the target; each hop verifies its own host key and authenticates independently.
+   */
+  readonly proxyJump?: RemoteJumpHost
 }
 
 /** Base cancellation carried by every remote request. */

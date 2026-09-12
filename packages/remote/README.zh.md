@@ -28,7 +28,7 @@ ssh 组为 agent 提供经 SSH 的远程命令执行与文件传输，同时不�
 | [`remote-ssh2`](remote-ssh2/README.zh.md) | 经 SSH2 执行该接缝：池化连接、严格主机密钥校验、SFTP 传输 | 注册 `ctx.remote` |
 | [`tool-remote`](tool-remote/README.zh.md) | 把远程执行与传输暴露给模型：`remote_exec`/`remote_read`/`remote_write`/`remote_edit`/`remote_push`/`remote_pull` | 注册于 `ctx.tools` |
 
-组合挂载一个后端（当前为 `dsh-remote-ssh2`）与工具包；工具随后在每次执行时解析各 analysis 的 `.dsh/config.yml`。
+组合挂载一个后端（当前为 `dsh-remote-ssh2`）与工具包；工具随后在每次执行时解析各 analysis 的 `.dsh/config.yml`。按 analysis 的 `remote:` 配置还支持可选的 `proxyJump:` 块，命名一个 SSH 跳板（bastion）主机，使仅能经该跳板到达的目标经其转发（`ssh -J` 语义），且每一跳都固定到各自的主机密钥。
 
 -----
 

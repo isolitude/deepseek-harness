@@ -41,8 +41,12 @@ All keys are optional; the defaults are sensible for interactive use.
 |---|---|---|
 | `idleTimeoutMs` | `60000` | Close a pooled connection after this idle time |
 | `connectTimeoutMs` | `15000` | Connection-establishment deadline |
+| `keepaliveIntervalMs` | `60000` | Send an SSH keepalive packet every this many milliseconds; `0` disables |
+| `keepaliveCountMax` | `3` | Drop the connection after this many consecutive unanswered keepalives |
 | `maxOutputBytes` | `262144` | Per-stream cap for one command's collected output |
 | `maxReadBytes` | `16777216` | Cap for one text read/write/edit payload |
+
+Keepalive is on by default: every connection sends an SSH-level keepalive packet every `keepaliveIntervalMs` and drops the connection after `keepaliveCountMax` consecutive unanswered packets. This is global, so long-running sessions stay stable without per-host setup, mirroring OpenSSH's `ServerAliveInterval` / `ServerAliveCountMax`. Set `keepaliveIntervalMs: 0` to disable keepalive for every connection.
 
 Per-connection values (host, port, user, auth, remote root, transfer cap, fingerprint) come from the per-analysis configuration that `dsh-tool-remote` resolves; none of them belong here.
 
@@ -52,7 +56,7 @@ The tool layer materializes one of three forms on the connection: a private key 
 
 ### Host-key policy
 
-Strict by default: a connection must carry the expected SHA256 fingerprint of the remote host key (`hostKeyFingerprint` in the analysis configuration). Collect it once out-of-band (`ssh-keyscan` or a first manual `ssh` session) and pin it; a mismatch fails with `REMOTE_HOST_KEY_MISMATCH` and no traffic is exchanged.
+Strict by default: a connection must carry the expected SHA256 fingerprint of the remote host key (`hostKeyFingerprint` in the analysis configuration). Collect it once out-of-band (`ssh-keyscan` or a first manual `ssh` session) and pin it; a mismatch fails with `REMOTE_HOST_KEY_MISMATCH` and no traffic is exchanged. When the analysis config names a `proxyJump` hop, that hop carries its own `hostKeyFingerprint` and is verified independently of the target before any tunnel is opened.
 
 -----
 
@@ -64,7 +68,7 @@ Strict by default: a connection must carry the expected SHA256 fingerprint of th
 
 ### Design philosophy
 
-- **One pooled client per identity.** Connections are keyed by a serialized identity (analysis id, host, port, user, auth kind/key path); reused while live and closed on idle timeout, on explicit `dispose()`, and on context teardown. A socket that closes underneath the pool is detected and rebuilt on the next call.
+- **One pooled client per identity.** Connections are keyed by a serialized identity (analysis id, host, port, user, auth kind/key path, and the jump host when present); reused while live and closed on idle timeout, on explicit `dispose()`, and on context teardown. A socket that closes underneath the pool is detected and rebuilt on the next call. A connection routed through a `proxyJump` hop holds both clients and tears the jump down (destroy the forward stream, end the hop) together with the target.
 - **Atomic remote writes.** Text writes and pushed files land in a temp sibling first and publish through an SFTP `rename`, so a failed transfer never leaves a partial file.
 - **Bounded everywhere.** Command output, text payloads, and transfers respect caps; overflow fails with `REMOTE_TOO_LARGE` rather than silently truncating.
 

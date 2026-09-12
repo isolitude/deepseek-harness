@@ -34,6 +34,7 @@ export type {
   RemoteEditRequest,
   RemoteEditResult,
   RemoteErrorCode,
+  RemoteJumpHost,
   RemotePullRequest,
   RemotePushRequest,
   RemoteReadLine,

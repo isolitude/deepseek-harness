@@ -157,9 +157,28 @@ const fake = vi.hoisted(() => {
     /** When true, end() settles the channel like an instantly-finished command. */
     autoSettle: true,
     instances: 0,
+    /** Records each forwardOut(dst) request in the order it was made. */
+    forwardOuts: [] as Array<{ srcPort: number; dstIP: string; dstPort: number }>,
+    /** When set, the next forwardOut rejects with this error. */
+    nextForwardError: undefined as Error | undefined,
+    /** Redirect a connection through a jump by exposing the requested forward stream. */
+    forwardStream: undefined as InstanceType<typeof FakeForwardStream> | undefined,
+    /** True once a connection was seeded with a jump forward stream. */
+    sawSock: false,
+    /** When set, the next sock-seeded (target-through-jump) connection fails. */
+    nextTargetConnectError: undefined as unknown,
+    /** Records each `connect` opts object in the order it was made. */
+    connectOpts: [] as Array<Record<string, unknown>>,
   }
 
-  return { FakeSftp, State }
+  class FakeForwardStream {
+    destroyed = false
+    destroy(): void {
+      this.destroyed = true
+    }
+  }
+
+  return { FakeSftp, FakeForwardStream, State }
 })
 
 vi.mock('ssh2', () => {
@@ -170,6 +189,16 @@ vi.mock('ssh2', () => {
 
       connect(opts: Record<string, unknown>): void {
         State.instances += 1
+        State.connectOpts.push(opts)
+        // Record whether this connection rode a jump forward stream.
+        if (opts['sock'] !== undefined) State.sawSock = true
+        // A target-through-jump connection carries a sock; fail it on demand.
+        if (opts['sock'] !== undefined && State.nextTargetConnectError !== undefined) {
+          const err = State.nextTargetConnectError
+          State.nextTargetConnectError = undefined
+          process.nextTick(() => { this.emit('error', err) })
+          return
+        }
         if (State.hostKeyResult === 'throw') {
           // Run the provider's verifier: it throws a RemoteError for an unpinned host.
           let thrown: unknown
@@ -217,6 +246,23 @@ vi.mock('ssh2', () => {
           return
         }
         process.nextTick(() => { cb(null, this.pendingChannel) })
+      }
+
+      forwardOut(
+        _srcIP: string,
+        srcPort: number,
+        dstIP: string,
+        dstPort: number,
+        cb: (err: Error | null, stream?: unknown) => void,
+      ): void {
+        State.forwardOuts.push({ srcPort, dstIP, dstPort })
+        if (State.nextForwardError !== undefined) {
+          const err = State.nextForwardError
+          State.nextForwardError = undefined
+          process.nextTick(() => { cb(err) })
+          return
+        }
+        process.nextTick(() => { cb(null, State.forwardStream ?? new fake.FakeForwardStream()) })
       }
 
       sftp(cb: (err: Error | null, sftp?: InstanceType<typeof FakeSftp>) => void): void {
@@ -296,6 +342,20 @@ function connection(overrides: Partial<RemoteConnection> = {}): RemoteConnection
   }
 }
 
+/** A connection routed through a jump host with its own auth and host-key pin. */
+function jumpConnection(overrides: Partial<RemoteConnection> = {}): RemoteConnection {
+  return connection({
+    proxyJump: {
+      host: 'bastion',
+      port: 22,
+      user: 'deploy',
+      auth: { kind: 'agent' },
+      hostKeyFingerprint: 'k5oIER1zWPS2DskTVYJ8pnQgCEoARdjWw9QSJFaehfA=',
+    },
+    ...overrides,
+  })
+}
+
 /** Grab the single pooled client the executor built so tests can wire a channel. */
 async function acquireClient(exec: Ssh2RemoteExecutor, conn: RemoteConnection = connection()): Promise<FakeClientLike> {
   const pooled = await (exec as unknown as {
@@ -327,6 +387,12 @@ beforeEach(async () => {
   fake.State.killSettles = false
   fake.State.autoSettle = true
   fake.State.instances = 0
+  fake.State.forwardOuts = []
+  fake.State.nextForwardError = undefined
+  fake.State.forwardStream = undefined
+  fake.State.sawSock = false
+  fake.State.nextTargetConnectError = undefined
+  fake.State.connectOpts = []
   ctx = new Context()
   executor = new Ssh2RemoteExecutor(ctx, {
     idleTimeoutMs: 60_000,
@@ -449,6 +515,35 @@ describe('connection policy and pooling', () => {
     expect(result.lines[0]).toMatchObject({ number: 1, text: 'hello' })
   })
 
+  it('sends keepalive packets by default (global, no per-host setup)', async () => {
+    fake.State.sftp!.withFile('a.txt', 'hello')
+    const bare = new Ssh2RemoteExecutor(new Context())
+    await bare.readText(connection(), { path: 'a.txt', offset: 1, limit: 10 })
+    expect(fake.State.connectOpts).toHaveLength(1)
+    // Mirrors `ServerAliveInterval 60` / `ServerAliveCountMax 3` without user config.
+    expect(fake.State.connectOpts[0]).toMatchObject({ keepaliveInterval: 60_000, keepaliveCountMax: 3 })
+  })
+
+  it('sends keepalive on the jump hop as well as the target', async () => {
+    fake.State.sftp!.withFile('a.txt', 'hello')
+    const bare = new Ssh2RemoteExecutor(new Context())
+    await bare.readText(jumpConnection(), { path: 'a.txt', offset: 1, limit: 10 })
+    expect(fake.State.connectOpts).toHaveLength(2)
+    for (const opts of fake.State.connectOpts) {
+      expect(opts).toMatchObject({ keepaliveInterval: 60_000, keepaliveCountMax: 3 })
+    }
+  })
+
+  it('honors explicit keepalive config values', async () => {
+    fake.State.sftp!.withFile('a.txt', 'hello')
+    const custom = new Ssh2RemoteExecutor(new Context(), {
+      keepaliveIntervalMs: 30_000,
+      keepaliveCountMax: 5,
+    })
+    await custom.readText(connection(), { path: 'a.txt', offset: 1, limit: 10 })
+    expect(fake.State.connectOpts[0]).toMatchObject({ keepaliveInterval: 30_000, keepaliveCountMax: 5 })
+  })
+
   it('surfaces an sftp-channel open failure', async () => {
     fake.State.sftpError = new Error('sftp open failed')
     await expect(executor.readText(connection(), { path: 'a.txt', offset: 1, limit: 10 }))
@@ -469,6 +564,66 @@ describe('connection policy and pooling', () => {
     await executor.readText(connection(), { path: 'a.txt', offset: 1, limit: 10 })
     await executor.readText(connection(), { path: 'a.txt', offset: 1, limit: 10 })
     expect(fake.State.instances).toBe(1)
+  })
+
+  it('tunnels the target connection through a configured jump host', async () => {
+    fake.State.sftp!.withFile('a.txt', 'hello')
+    const result = await executor.readText(jumpConnection(), { path: 'a.txt', offset: 1, limit: 10 })
+    expect(result.lines[0]).toMatchObject({ number: 1, text: 'hello' })
+    // The jump opened the forward stream to the target before the target connected.
+    expect(fake.State.forwardOuts).toHaveLength(1)
+    expect(fake.State.forwardOuts[0]).toMatchObject({ dstIP: 'compute-1', dstPort: 22 })
+    expect(fake.State.sawSock).toBe(true)
+    // One client for the jump hop and one for the target.
+    expect(fake.State.instances).toBe(2)
+  })
+
+  it('pools the jump hop with the target identity', async () => {
+    fake.State.sftp!.withFile('a.txt', 'hello')
+    await executor.readText(jumpConnection(), { path: 'a.txt', offset: 1, limit: 10 })
+    await executor.readText(jumpConnection(), { path: 'a.txt', offset: 1, limit: 10 })
+    // Identical config (including the same jump) reuses the pooled pair.
+    expect(fake.State.instances).toBe(2)
+  })
+
+  it('pools different jump hosts separately', async () => {
+    fake.State.sftp!.withFile('a.txt', 'hello')
+    await executor.readText(jumpConnection(), { path: 'a.txt', offset: 1, limit: 10 })
+    await executor.readText(jumpConnection({ proxyJump: { host: 'other-bastion', port: 22, user: 'deploy', auth: { kind: 'agent' }, hostKeyFingerprint: 'k5oIER1zWPS2DskTVYJ8pnQgCEoARdjWw9QSJFaehfA=' } }), { path: 'a.txt', offset: 1, limit: 10 })
+    expect(fake.State.instances).toBe(4)
+  })
+
+  it('surfaces a jump forward failure as REMOTE_CONNECT_FAILED', async () => {
+    fake.State.nextForwardError = new Error('forward denied')
+    await expect(executor.readText(jumpConnection(), { path: 'a.txt', offset: 1, limit: 10 }))
+      .rejects.toMatchObject({ code: 'REMOTE_CONNECT_FAILED' })
+  })
+
+  it('surfaces a target connect failure after a successful jump as REMOTE_CONNECT_FAILED', async () => {
+    fake.State.nextTargetConnectError = new Error('target unreachable')
+    await expect(executor.readText(jumpConnection(), { path: 'a.txt', offset: 1, limit: 10 }))
+      .rejects.toMatchObject({ code: 'REMOTE_CONNECT_FAILED' })
+  })
+
+  it('refuses an unpinned jump host key (strict, no TOFU)', async () => {
+    const unpinned = connection({
+      proxyJump: { host: 'bastion', port: 22, user: 'deploy', auth: { kind: 'agent' } },
+    })
+    fake.State.hostKeyResult = 'throw'
+    await expect(executor.readText(unpinned, { path: 'a.txt', offset: 1, limit: 10 }))
+      .rejects.toMatchObject({ code: 'REMOTE_HOST_KEY_MISMATCH' })
+  })
+
+  it('releases the jump client and stream on disposal', async () => {
+    fake.State.sftp!.withFile('a.txt', 'hello')
+    const stream = new fake.FakeForwardStream()
+    fake.State.forwardStream = stream
+    await executor.readText(jumpConnection(), { path: 'a.txt', offset: 1, limit: 10 })
+    expect(stream.destroyed).toBe(false)
+    executor.dispose()
+    // The forward stream is destroyed when the pooled pair is torn down.
+    expect(stream.destroyed).toBe(true)
+    expect(fake.State.instances).toBe(2)
   })
 
   it('closes a pooled client after its idle timeout, then reconnects on the next call', async () => {

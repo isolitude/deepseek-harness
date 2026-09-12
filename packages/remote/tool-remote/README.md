@@ -48,15 +48,23 @@ remote:
     kind: key               # key | password | agent
     keyPath: ./.dsh/secrets/id_ed25519
     # passwordRef: LLPWA_<analysis>_SSH_PASSWORD
+  # proxyJump:              # optional: reach compute-1 through a bastion
+  #   host: bastion
+  #   port: 22
+  #   user: deploy
+  #   hostKeyFingerprint: <SHA256 base64 of the jump host key>
+  #   auth:
+  #     kind: key
+  #     keyPath: ./.dsh/secrets/id_ed25519
 ```
 
-The tool resolves `keyPath` relative to the analysis directory; `passwordRef` names a credential (environment variable or `dsh-credentials` store), whose value never enters a tool argument, a result, or the session log. With no `auth` block the default is the key file at `.dsh/secrets/id_ed25519`.
+The tool resolves `keyPath` relative to the analysis directory; `passwordRef` names a credential (environment variable or `dsh-credentials` store), whose value never enters a tool argument, a result, or the session log. With no `auth` block the default is the key file at `.dsh/secrets/id_ed25519`. An optional `proxyJump` block routes the connection through an SSH jump (bastion) host (`ssh -J` semantics): it authenticates independently (`key`/`password`/`agent`, defaulting to the analysis key file) and is pinned to its own `hostKeyFingerprint`, which is verified separately from the target's.
 
 ### The tools
 
 | Tool | Arguments | Behavior |
 |---|---|---|
-| `remote_exec` | `command`, `workdir?`, `timeout_ms?` | Runs one remote shell command; returns `{ exit_code, signal, stdout, stderr, timed_out }` |
+| `remote_exec` | `command`, `workdir?`, `timeout_ms?` | Runs one remote shell command and waits for it; returns `{ exit_code, signal, stdout, stderr, timed_out }` |
 | `remote_read` | `path`, `offset?`, `limit?` | Line-numbered remote text window with totals and truncation truth |
 | `remote_write` | `path`, `content` | Atomic create/replace of a remote UTF-8 text file |
 | `remote_edit` | `path`, `old_string`, `new_string`, `replace_all?` | One literal replacement, requiring a unique match unless `replace_all` |
@@ -73,6 +81,17 @@ Local paths resolve against the calling session's workspace; remote paths resolv
 | `readLimit` | `2000` | Default and maximum lines returned by one `remote_read` |
 | `maxTransferBytes` | `268435456` | Default transfer cap for `remote_push`/`remote_pull` |
 | `workdir` | config `remoteRoot` | Default remote working directory for `remote_exec` |
+
+### Backgrounding a long-running command
+
+`remote_exec` runs a command to completion and returns only when the remote channel closes. To start a long job and not wait, background it on the remote shell, detach it from the tool's channel, and write output to a file:
+
+```bash
+nohup python3 train.py > run.log 2>&1 &
+echo $!
+```
+
+The command returns the background PID immediately while the job keeps running detached. Poll the result later with another `remote_exec` call, for example `tail run.log`, or transfer the log file back with `remote_pull`.
 
 -----
 

@@ -41,8 +41,12 @@ kind: "package-reference"
 |---|---|---|
 | `idleTimeoutMs` | `60000` | 空闲该毫秒数后关闭池化连接 |
 | `connectTimeoutMs` | `15000` | 建连期限 |
+| `keepaliveIntervalMs` | `60000` | 每该毫秒数发送一个 SSH keepalive 包；`0` 禁用 |
+| `keepaliveCountMax` | `3` | 连续该次数未应答 keepalive 后断开连接 |
 | `maxOutputBytes` | `262144` | 单条命令收集输出的每流上限 |
 | `maxReadBytes` | `16777216` | 单次文本读/写/编辑载荷上限 |
+
+keepalive 默认开启：每条连接每 `keepaliveIntervalMs` 发送一个 SSH 级 keepalive 包，并在连续 `keepaliveCountMax` 个包未应答后断开。这是全局生效的，因此长时会话无需按主机设置即可保持稳定，对应 OpenSSH 的 `ServerAliveInterval` / `ServerAliveCountMax`。设 `keepaliveIntervalMs: 0` 可对每条连接禁用 keepalive。
 
 按连接值（主机、端口、用户、认证、远程根、传输上限、指纹）来自 `dsh-tool-remote` 解析的按 analysis 配置；它们都不属于此处。
 
@@ -52,7 +56,7 @@ kind: "package-reference"
 
 ### 主机密钥策略
 
-默认严格：连接必须携带期望的远程主机密钥 SHA256 指纹（analysis 配置中的 `hostKeyFingerprint`）。一次性带外收集（`ssh-keyscan` 或首次手动 `ssh` 会话）并固定；不匹配以 `REMOTE_HOST_KEY_MISMATCH` 失败，且不交换任何流量。
+默认严格：连接必须携带期望的远程主机密钥 SHA256 指纹（analysis 配置中的 `hostKeyFingerprint`）。一次性带外收集（`ssh-keyscan` 或首次手动 `ssh` 会话）并固定；不匹配以 `REMOTE_HOST_KEY_MISMATCH` 失败，且不交换任何流量。当 analysis 配置命名了 `proxyJump` 跳板时，该跳板携带自己的 `hostKeyFingerprint`，并在打开任何隧道前与目标的指纹分开校验。
 
 -----
 
@@ -64,7 +68,7 @@ kind: "package-reference"
 
 ### 设计思路
 
-- **每身份一个池化客户端。** 连接按序列化身份（analysis id、主机、端口、用户、认证种类/密钥路径）为键；存活时复用，空闲超时、显式 `dispose()` 与上下文拆除时关闭。底层关闭的 socket 会被检测并在下次调用重建。
+- **每身份一个池化客户端。** 连接按序列化身份（analysis id、主机、端口、用户、认证种类/密钥路径，以及存在时的跳板主机）为键；存活时复用，空闲超时、显式 `dispose()` 与上下文拆除时关闭。底层关闭的 socket 会被检测并在下次调用重建。经 `proxyJump` 跳板路由的连接会持有两个客户端，并在拆除时连同目标一起关闭跳板（销毁转发流、结束该跳）。
 - **原子远程写。** 文本写与推送文件先落临时同件，再经 SFTP `rename` 发布，因此失败的传输不会留下半成品文件。
 - **处处有界。** 命令输出、文本载荷与传输都遵守上限；溢出以 `REMOTE_TOO_LARGE` 失败，而不是静默截断。
 

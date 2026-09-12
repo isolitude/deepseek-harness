@@ -23,9 +23,11 @@ import {
   resolveRemotePath,
 } from '@deepseek-ai/dsh-remote'
 import type {
+  RemoteAuth,
   RemoteConnection,
   RemoteEditRequest,
   RemoteEditResult,
+  RemoteJumpHost,
   RemotePullRequest,
   RemotePushRequest,
   RemoteReadRequest,
@@ -46,6 +48,10 @@ export interface Config {
   idleTimeoutMs?: number
   /** Connection-establishment deadline. Default 15s. */
   connectTimeoutMs?: number
+  /** How often to send SSH keepalive packets. Default 60s; 0 disables. */
+  keepaliveIntervalMs?: number
+  /** Consecutive unanswered keepalives before the connection is dropped. Default 3. */
+  keepaliveCountMax?: number
   /** Per-stream cap for one command's collected output. Default 256 KiB. */
   maxOutputBytes?: number
   /** Cap for one text read/write/edit payload. Default 16 MiB. */
@@ -55,6 +61,8 @@ export interface Config {
 export const Config: z<Config> = z.object({
   idleTimeoutMs: z.number().default(60_000),
   connectTimeoutMs: z.number().default(15_000),
+  keepaliveIntervalMs: z.number().default(60_000),
+  keepaliveCountMax: z.number().default(3),
   maxOutputBytes: z.number().default(256 * 1024),
   maxReadBytes: z.number().default(16 * 1024 * 1024),
 })
@@ -62,6 +70,8 @@ export const Config: z<Config> = z.object({
 /** One pooled SSH client plus its liveness state. */
 interface PooledClient {
   readonly client: Client
+  /** The jump hop this target was tunnelled through, when configured. */
+  jump: { readonly client: Client; readonly stream: import('ssh2').ClientChannel } | undefined
   /** Lazily opened SFTP handle bound to this client. */
   sftp: SFTPWrapper | undefined
   /** Idle-sweep timer; cleared on use. */
@@ -84,18 +94,28 @@ function fingerprintOf(hostKey: Buffer): string {
 
 /** Serialized identity of one resolved connection (the pool key). */
 function connectionFingerprint(connection: RemoteConnection): string {
-  const auth = connection.auth
-  const authId = auth.kind === 'key'
+  const jump = connection.proxyJump === undefined
+    ? ''
+    : `|jump:${jumpIdOf(connection.proxyJump)}`
+  return `${connection.id}|${connection.host}:${connection.port}|${connection.user}|${authIdOf(connection.auth)}${jump}`
+}
+
+/** Serialized identity of one jump hop (relative to its connection). */
+function jumpIdOf(jump: RemoteJumpHost): string {
+  return `${jump.host}:${jump.port}|${jump.user}|${authIdOf(jump.auth)}`
+}
+
+/** Serialized identity of one auth form (the key-path, password, or agent marker). */
+function authIdOf(auth: RemoteAuth): string {
+  return auth.kind === 'key'
     ? `key:${auth.keyPath}`
     : auth.kind === 'password'
       ? 'pw'
       : 'agent'
-  return `${connection.id}|${connection.host}:${connection.port}|${connection.user}|${authId}`
 }
 
 /** Read and materialize the auth half of the connect config. */
-async function authConfig(connection: RemoteConnection): Promise<ConnectConfig> {
-  const auth = connection.auth
+async function authConfig(auth: RemoteAuth): Promise<ConnectConfig> {
   if (auth.kind === 'key') {
     let privateKey: string | Buffer
     try {
@@ -118,16 +138,12 @@ async function authConfig(connection: RemoteConnection): Promise<ConnectConfig> 
   return sock ? { agent: sock } : {}
 }
 
-/**
- * The host-key verifier: strict by default. A connection without a pinned
- * `hostKeyFingerprint` is refused; there is deliberately no trust-on-first-use.
- */
-function hostVerifier(connection: RemoteConnection): (key: Buffer) => boolean {
+/** The host-key verifier for one hop: strict by default, no trust-on-first-use. */
+function hostVerifier(host: string, expected: string | undefined): (key: Buffer) => boolean {
   return (key: Buffer): boolean => {
-    const expected = connection.hostKeyFingerprint
     if (expected === undefined) {
       throw new RemoteError(
-        `host key not pinned for '${connection.host}'; set hostKeyFingerprint in the analysis .dsh configuration`,
+        `host key not pinned for '${host}'; set hostKeyFingerprint in the analysis .dsh configuration`,
         'REMOTE_HOST_KEY_MISMATCH',
       )
     }
@@ -135,56 +151,153 @@ function hostVerifier(connection: RemoteConnection): (key: Buffer) => boolean {
   }
 }
 
-function classifyConnectError(cause: unknown, connection: RemoteConnection): RemoteError {
+function classifyConnectError(cause: unknown, host: string, user: string, port: number): RemoteError {
   if (cause instanceof RemoteError) return cause
   const message = messageOf(cause)
   if (/host key/i.test(message)) {
-    return new RemoteError(`host key verification failed for '${connection.host}'`, 'REMOTE_HOST_KEY_MISMATCH', { cause })
+    return new RemoteError(`host key verification failed for '${host}'`, 'REMOTE_HOST_KEY_MISMATCH', { cause })
   }
   if (/(authentication|permission denied|all configured authentication methods failed)/i.test(message)) {
     return new RemoteError(
-      `authentication failed for '${connection.user}@${connection.host}'`,
+      `authentication failed for '${user}@${host}'`,
       'REMOTE_AUTH_FAILED',
       { cause },
     )
   }
   return new RemoteError(
-    `cannot connect to '${connection.user}@${connection.host}:${connection.port}': ${message}`,
+    `cannot connect to '${user}@${host}:${port}': ${message}`,
     'REMOTE_CONNECT_FAILED',
     { cause },
   )
 }
 
-/** Establish one live client, mapping failure to typed errors. */
+/** Open one side of the connection (the jump hop or the target) with its own host-key pin. */
+function connectOne(
+  host: string,
+  port: number,
+  user: string,
+  auth: RemoteAuth,
+  expectedFingerprint: string | undefined,
+  connectTimeoutMs: number,
+  keepaliveIntervalMs: number,
+  keepaliveCountMax: number,
+  sock?: import('node:stream').Readable,
+): Promise<Client> {
+  return new Promise<Client>((resolve, reject) => {
+    const client = new Client()
+    const onError = (err: Error): void => { reject(err) }
+    const onReady = (): void => {
+      client.removeListener('error', onError)
+      resolve(client)
+    }
+    client.on('error', onError)
+    client.on('ready', onReady)
+    authConfig(auth)
+      .then((config) => {
+        client.connect({
+          host,
+          port,
+          username: user,
+          readyTimeout: connectTimeoutMs,
+          hostVerifier: hostVerifier(host, expectedFingerprint),
+          keepaliveInterval: keepaliveIntervalMs,
+          keepaliveCountMax,
+          ...(sock !== undefined ? { sock } : {}),
+          ...config,
+        })
+      })
+      .catch((cause: unknown) => {
+        client.end()
+        // authConfig rejects with a typed RemoteError; a non-Error value is
+        // normalized so the rejection is always an Error (the connect classifier
+        // passes RemoteErrors through and wraps everything else).
+        /* v8 ignore next -- authConfig rejects only with a RemoteError; the non-Error arm is defensive. */
+        reject(cause instanceof Error ? cause : new Error(messageOf(cause)))
+      })
+  })
+}
+
+/** Request the forward stream through an established jump client to the target. */
+function forwardThroughJump(
+  client: Client,
+  targetHost: string,
+  targetPort: number,
+): Promise<import('ssh2').ClientChannel> {
+  return new Promise((resolve, reject) => {
+    client.forwardOut('127.0.0.1', 0, targetHost, targetPort, (err, stream) => {
+      if (err) reject(new RemoteError(`cannot forward through jump to '${targetHost}:${targetPort}': ${messageOf(err)}`, 'REMOTE_CONNECT_FAILED', { cause: err }))
+      else resolve(stream)
+    })
+  })
+}
+
+/** Establish one live client and the jump hop it tunnels through, mapping failure to typed errors. */
 async function connectClient(
   connection: RemoteConnection,
-  connectTimeoutMs: number,
-): Promise<Client> {
-  const client = new Client()
-  const auth = await authConfig(connection)
-  try {
-    await new Promise<void>((resolve, reject) => {
-      const onError = (err: Error): void => { reject(err) }
-      const onReady = (): void => {
-        client.removeListener('error', onError)
-        resolve()
-      }
-      client.on('error', onError)
-      client.on('ready', onReady)
-      client.connect({
-        host: connection.host,
-        port: connection.port,
-        username: connection.user,
-        readyTimeout: connectTimeoutMs,
-        hostVerifier: hostVerifier(connection),
-        ...auth,
-      })
+  opts: Required<Config>,
+): Promise<{ client: Client; jump?: { client: Client; stream: import('ssh2').ClientChannel } }> {
+  const jump = connection.proxyJump
+  if (jump === undefined) {
+    const client = await connectOne(
+      connection.host,
+      connection.port,
+      connection.user,
+      connection.auth,
+      connection.hostKeyFingerprint,
+      opts.connectTimeoutMs,
+      opts.keepaliveIntervalMs,
+      opts.keepaliveCountMax,
+    ).catch((cause: unknown) => {
+      throw classifyConnectError(cause, connection.host, connection.user, connection.port)
     })
-    return client
-  } catch (cause) {
-    client.end()
-    throw classifyConnectError(cause, connection)
+    return { client }
   }
+
+  let jumpClient: Client
+  try {
+    jumpClient = await connectOne(
+      jump.host,
+      jump.port,
+      jump.user,
+      jump.auth,
+      jump.hostKeyFingerprint,
+      opts.connectTimeoutMs,
+      opts.keepaliveIntervalMs,
+      opts.keepaliveCountMax,
+    )
+  } catch (cause) {
+    throw classifyConnectError(cause, jump.host, jump.user, jump.port)
+  }
+
+  let stream: import('ssh2').ClientChannel
+  try {
+    stream = await forwardThroughJump(jumpClient, connection.host, connection.port)
+  } catch (cause) {
+    jumpClient.end()
+    // forwardThroughJump rejects only with a typed RemoteError; no other thrower is reachable.
+    throw cause
+  }
+
+  let client: Client
+  try {
+    client = await connectOne(
+      connection.host,
+      connection.port,
+      connection.user,
+      connection.auth,
+      connection.hostKeyFingerprint,
+      opts.connectTimeoutMs,
+      opts.keepaliveIntervalMs,
+      opts.keepaliveCountMax,
+      stream,
+    )
+  } catch (cause) {
+    stream.destroy()
+    jumpClient.end()
+    throw classifyConnectError(cause, connection.host, connection.user, connection.port)
+  }
+
+  return { client, jump: { client: jumpClient, stream } }
 }
 
 /** Promise wrapper around `client.exec`. */
@@ -464,6 +577,12 @@ function sftpOf(pooled: PooledClient): Promise<SFTPWrapper> {
 function free(pooled: PooledClient): void {
   if (pooled.idleTimer !== undefined) clearTimeout(pooled.idleTimer)
   pooled.client.end()
+  // Tear down the jump hop after the target: destroy the forward stream and
+  // close the jump client so no tunnel resource leaks across calls.
+  if (pooled.jump !== undefined) {
+    pooled.jump.stream.destroy()
+    pooled.jump.client.end()
+  }
 }
 
 /**
@@ -474,6 +593,8 @@ export class Ssh2RemoteExecutor extends RemoteExecutor {
   static Config: z<Config> = z.object({
     idleTimeoutMs: z.number().default(60_000),
     connectTimeoutMs: z.number().default(15_000),
+    keepaliveIntervalMs: z.number().default(60_000),
+    keepaliveCountMax: z.number().default(3),
     maxOutputBytes: z.number().default(256 * 1024),
     maxReadBytes: z.number().default(16 * 1024 * 1024),
   })
@@ -486,6 +607,8 @@ export class Ssh2RemoteExecutor extends RemoteExecutor {
     this.opts = {
       idleTimeoutMs: config.idleTimeoutMs ?? 60_000,
       connectTimeoutMs: config.connectTimeoutMs ?? 15_000,
+      keepaliveIntervalMs: config.keepaliveIntervalMs ?? 60_000,
+      keepaliveCountMax: config.keepaliveCountMax ?? 3,
       maxOutputBytes: config.maxOutputBytes ?? 256 * 1024,
       maxReadBytes: config.maxReadBytes ?? 16 * 1024 * 1024,
     }
@@ -516,8 +639,8 @@ export class Ssh2RemoteExecutor extends RemoteExecutor {
       free(existing)
       this.pool.delete(fingerprint)
     }
-    const client = await connectClient(connection, this.opts.connectTimeoutMs)
-    const pooled: PooledClient = { client, sftp: undefined, idleTimer: undefined, fingerprint, closed: false }
+    const { client, jump } = await connectClient(connection, this.opts)
+    const pooled: PooledClient = { client, jump, sftp: undefined, idleTimer: undefined, fingerprint, closed: false }
     client.on('close', () => { pooled.closed = true })
     this.pool.set(fingerprint, pooled)
     return pooled

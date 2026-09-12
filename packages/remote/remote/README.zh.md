@@ -32,7 +32,7 @@ kind: "package-reference"
 
 ### 服务能做什么
 
-通过 `ctx.remote` 你可以运行一条远程 shell 命令并获得有界输出（`run`），读取远程 UTF-8 文本文件的有界行号窗口（`readText`），原子创建或替换文件（`writeText`），应用一次字面量编辑（`editText`），并经 SFTP 双向流式传输单个文件（`push` / `pull`）。每个操作都接收解析后的连接；失败是带稳定代码（如 `REMOTE_AUTH_FAILED`、`REMOTE_HOST_KEY_MISMATCH`、`REMOTE_NOT_FOUND`、`REMOTE_TOO_LARGE`）的 `RemoteError`，调用方按代码分支，而不是解析消息文本。
+通过 `ctx.remote` 你可以运行一条远程 shell 命令并获得有界输出（`run`），读取远程 UTF-8 文本文件的有界行号窗口（`readText`），原子创建或替换文件（`writeText`），应用一次字面量编辑（`editText`），并经 SFTP 双向流式传输单个文件（`push` / `pull`）。每个操作都接收解析后的连接；失败是带稳定代码（如 `REMOTE_AUTH_FAILED`、`REMOTE_HOST_KEY_MISMATCH`、`REMOTE_NOT_FOUND`、`REMOTE_TOO_LARGE`）的 `RemoteError`，调用方按代码分支，而不是解析消息文本。连接还可携带一个 `proxyJump` 跳板（SSH 跳板/bastion 主机），后端在到达目标前先经其隧道转发；该跳板是带自身 `RemoteAuth` 与主机密钥固定的 `RemoteJumpHost`。
 
 -----
 
@@ -47,6 +47,7 @@ kind: "package-reference"
 - **每次调用显式连接。** 该接缝不施加连接默认值：工具层在每个操作前把按 analysis 解析的配置（主机、认证、远程根、上限）物化为完全解析的 `RemoteConnection`，因此部署策略停留在配置边界。
 - **类型化错误、不透明身份。** 失败携带稳定代码；远程路径基于连接的 `remoteRoot` 解析并拒绝父级越界。
 - **取消随请求。** 每个请求可选携带调用方拥有的 `AbortSignal`（工具传入 `exec.signal`）；后端在通道与传输边界观察它。
+- **连接上可选的跳板。** 连接可携带一个后端经其隧道转发的 `proxyJump`（SSH bastion）跳板；它独立认证并固定自己的主机密钥，因此每一跳都单独校验。
 
 ### 源码地图
 
