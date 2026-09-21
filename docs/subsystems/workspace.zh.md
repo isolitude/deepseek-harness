@@ -323,6 +323,13 @@ Host service backing the generated `ctx.remote.workspace` namespace.
  * @param request - Workspace, Session, and optional anchor identities.
  * @returns the updated Workspace projection.
  */
+@Remote('attachSession') attachSession(request: WorkspaceAttachSessionRequest): Promise<WorkspaceValue>
+
+/**
+ * Move one accounted Session within a Workspace.
+ * @param request - Workspace, Session, and optional anchor identities.
+ * @returns the updated Workspace projection.
+ */
 @Remote('insertSessionBefore') insertSessionBefore(request: WorkspaceInsertSessionBeforeRequest): Promise<WorkspaceValue>
 
 /**
@@ -424,7 +431,23 @@ Host Remote file reads and workspace directory observations over the composed fi
  *   root is resolved, then queued and live observations in emission order.
  */
 @Remote({ mode: 'stream' }) changes(workspaceFileScope: WorkspaceFileScope, signal: AbortSignal): AsyncIterable<WorkspaceFileWatchFrame>
+
+/**
+ * Atomically create or replace a whole UTF-8 text file inside the Agent's
+ * workspace, creating any missing parent directories. The write is fenced by
+ * the session's sandbox policy (the same confinement the model-facing `write`
+ * tool gets) and confined to the workspace root; a `read-only` session is
+ * refused with `workspace-file/write-denied`. Used by the workbench to persist
+ * per-analysis settings beside the analysis.
+ * @param agent - target Agent resolved from the Session identity on the wire.
+ * @param request - the workspace path and full new content.
+ * @param signal - caller cancellation.
+ * @returns the written file's identity, version, and create/update operation.
+ */
+@Remote async write(agent: Agent, request: WorkspaceFileWriteRequest, signal: AbortSignal): Promise<WorkspaceFileWrite>
 ```
+
+Types: [Agent](core.zh.md)
 
 Source: [`packages/api/workspace-files/src/index.ts`](../../packages/api/workspace-files/src/index.ts)
 

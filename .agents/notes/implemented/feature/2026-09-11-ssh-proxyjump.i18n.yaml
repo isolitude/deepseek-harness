@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-11-ssh-proxyjump.md
-2026-09-11-ssh-proxyjump.md: 26e7e3a33c432fb6d070b309b106473320330fbd
-2026-09-11-ssh-proxyjump.zh.md: d19fd4331b5790ab5c5dadba9b62a799ab2d6872
+2026-09-11-ssh-proxyjump.md: b235b2e28e046bb47d49112997cfa5a06a4524a3
+2026-09-11-ssh-proxyjump.zh.md: 036ca41396494f8204149ed717b04057a327fc89

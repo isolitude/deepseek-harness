@@ -11,6 +11,8 @@ import {
   listAnalyses, loadSnapshot, missingSnapshotHint, PIPELINE_STATE_FILE,
   listReferenceFiles, loadReferenceText,
   readAnalysisAgentSession, writeAnalysisAgentSession,
+  analysisTasksPath, listTasks, loadTaskStatus, listTaskDir, loadTaskFileText,
+  taskStatusPath, taskDirPath,
   type WorkspaceFilesLoadRemote,
 } from '../src/client/load.ts'
 
@@ -357,5 +359,142 @@ describe('analysis agent-session settings', () => {
     })
     const ok = await writeAnalysisAgentSession(remote(vi.fn(), vi.fn(), write), SESSION, 'kk_dis', 'sx' as SessionId, new AbortController().signal)
     expect(ok).toBe(false)
+  })
+})
+
+describe('analysisTasksPath / taskStatusPath / taskDirPath', () => {
+  it('builds the task root, status-file, and task-directory paths', () => {
+    expect(analysisTasksPath('kk_dis')).toBe('LLMPWA/analyses/kk_dis/task')
+    expect(taskStatusPath('kk_dis', 't1')).toBe('LLMPWA/analyses/kk_dis/task/t1/status.json')
+    expect(taskDirPath('kk_dis', 't1')).toBe('LLMPWA/analyses/kk_dis/task/t1')
+  })
+})
+
+describe('listTasks', () => {
+  it('lists only directory entries under the analysis task root', async () => {
+    const r = remote(
+      vi.fn().mockResolvedValue({
+        ok: true,
+        value: {
+          entries: [
+            { name: 't1', type: 'directory' },
+            { name: 'notes.txt', type: 'file' },
+            { name: 'other', type: 'other' },
+          ],
+        },
+      }),
+      vi.fn(),
+    )
+    const tasks = await listTasks(r, SESSION, 'kk_dis', new AbortController().signal)
+    expect(r.workspaceFiles.list).toHaveBeenCalledWith(SESSION, 'LLMPWA/analyses/kk_dis/task', expect.any(AbortSignal))
+    expect(tasks).toEqual([{ id: 't1', dir: 'LLMPWA/analyses/kk_dis/task/t1' }])
+  })
+
+  it('returns an empty list when the task root is missing or unreadable', async () => {
+    const r = remote(
+      vi.fn().mockResolvedValue({ ok: false, error: { code: 'workspace-file/not-found', message: 'gone' } }),
+      vi.fn(),
+    )
+    expect(await listTasks(r, SESSION, 'kk_dis', new AbortController().signal)).toEqual([])
+  })
+})
+
+describe('loadTaskStatus', () => {
+  const page = (text: string): unknown => ({
+    ok: true,
+    value: { text, version: 'v1', offset: 1, eof: true, lines: 1 },
+  })
+
+  it('parses a task status on one page', async () => {
+    const r = remote(vi.fn(), vi.fn().mockResolvedValue(page('{"task_id":"t1","status":"completed"}')))
+    const load = await loadTaskStatus(r, SESSION, 'kk_dis', 't1', new AbortController().signal)
+    expect(r.workspaceFiles.read).toHaveBeenCalledWith(
+      SESSION, 'LLMPWA/analyses/kk_dis/task/t1/status.json', { offset: 1 }, expect.any(AbortSignal),
+    )
+    expect(load.ok).toBe(true)
+    expect(load.ok ? load.task.task_id : undefined).toBe('t1')
+  })
+
+  it('reports a missing status for a not-found read', async () => {
+    const r = remote(vi.fn(), vi.fn().mockResolvedValue({
+      ok: false,
+      error: { code: 'workspace-file/not-found', message: 'gone' },
+    }))
+    const load = await loadTaskStatus(r, SESSION, 'kk_dis', 't1', new AbortController().signal)
+    expect(load).toEqual({ ok: false, error: { kind: 'missing', message: 'gone' } })
+  })
+
+  it('reports a parse failure for malformed JSON', async () => {
+    const r = remote(vi.fn(), vi.fn().mockResolvedValue(page('{ nope')))
+    const load = await loadTaskStatus(r, SESSION, 'kk_dis', 't1', new AbortController().signal)
+    expect(load.ok).toBe(false)
+    expect(load.ok ? undefined : load.error.kind).toBe('parse')
+  })
+
+  it('reports a parse failure for a non-object status', async () => {
+    const r = remote(vi.fn(), vi.fn().mockResolvedValue(page('[1,2,3]')))
+    const load = await loadTaskStatus(r, SESSION, 'kk_dis', 't1', new AbortController().signal)
+    expect(load.ok).toBe(false)
+    expect(load.ok ? undefined : load.error.kind).toBe('parse')
+  })
+})
+
+describe('listTaskDir', () => {
+  it('lists file and directory children and maps their paths', async () => {
+    const r = remote(
+      vi.fn().mockResolvedValue({
+        ok: true,
+        value: {
+          entries: [
+            { name: 'status.json', type: 'file' },
+            { name: '1_运行代码', type: 'directory' },
+            { name: 'other', type: 'other' },
+          ],
+        },
+      }),
+      vi.fn(),
+    )
+    const entries = await listTaskDir(r, SESSION, 'LLMPWA/analyses/kk_dis/task/t1', new AbortController().signal)
+    expect(r.workspaceFiles.list).toHaveBeenCalledWith(
+      SESSION, 'LLMPWA/analyses/kk_dis/task/t1', expect.any(AbortSignal),
+    )
+    expect(entries).toEqual([
+      { path: 'LLMPWA/analyses/kk_dis/task/t1/status.json', name: 'status.json', kind: 'file' },
+      { path: 'LLMPWA/analyses/kk_dis/task/t1/1_运行代码', name: '1_运行代码', kind: 'directory' },
+    ])
+  })
+
+  it('returns no children when the directory listing fails', async () => {
+    const r = remote(
+      vi.fn().mockResolvedValue({ ok: false, error: { code: 'workspace-file/not-found', message: 'gone' } }),
+      vi.fn(),
+    )
+    const entries = await listTaskDir(r, SESSION, 'LLMPWA/analyses/kk_dis/task/t1', new AbortController().signal)
+    expect(entries).toEqual([])
+  })
+})
+
+describe('loadTaskFileText', () => {
+  const page = (text: string, eof = true): unknown => ({
+    ok: true,
+    value: { text, version: 'v1', offset: 1, eof, lines: 1 },
+  })
+
+  it('reads one task file on a single page', async () => {
+    const r = remote(vi.fn(), vi.fn().mockResolvedValue(page('# title')))
+    const load = await loadTaskFileText(r, SESSION, 'LLMPWA/analyses/kk_dis/task/t1/3_报告/r.md', new AbortController().signal)
+    expect(r.workspaceFiles.read).toHaveBeenCalledWith(
+      SESSION, 'LLMPWA/analyses/kk_dis/task/t1/3_报告/r.md', { offset: 1 }, expect.any(AbortSignal),
+    )
+    expect(load).toEqual({ ok: true, text: '# title' })
+  })
+
+  it('reports a missing task file for a not-found read', async () => {
+    const r = remote(vi.fn(), vi.fn().mockResolvedValue({
+      ok: false,
+      error: { code: 'workspace-file/not-found', message: 'gone' },
+    }))
+    const load = await loadTaskFileText(r, SESSION, 'x.md', new AbortController().signal)
+    expect(load).toEqual({ ok: false, error: { kind: 'missing', message: 'gone' } })
   })
 })

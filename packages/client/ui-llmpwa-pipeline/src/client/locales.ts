@@ -29,6 +29,12 @@ export const en = {
   'panel.error.reference': 'Could not read the reference file:',
   'panel.tabs.dag': 'DAG',
   'panel.tabs.docs': 'Documents',
+  'panel.tabs.tasks': 'Tasks',
+  'panel.tasksTitle': 'Task records',
+  'panel.tasksEmpty': 'No fit tasks for this analysis.',
+  'panel.task.filesTitle': 'Files',
+  'panel.task.popupTitle': 'Task',
+  'panel.task.resizePopup': 'Resize task panel',
   'panel.openAgent': 'Open Agent',
   'panel.drawerTitle': 'Analysis Agent',
   'panel.drawerAgentLaunch': 'Launch agent in the analysis',
@@ -39,9 +45,15 @@ export const en = {
   'panel.copy': 'Copy',
   'panel.copied': 'Copied',
   'panel.footnotes': 'Footnotes',
+  'panel.htmlPreview': 'HTML document',
   'panel.error.agent': 'Could not open the agent session:',
 } as const
 
+/**
+ * Simplified-Chinese workbench copy, mirroring {@link en} key-for-key. The
+ * `zh` dictionary is registered beside `en` so the workbench renders the
+ * user's active locale.
+ */
 export const zh = {
   'action.label': 'LLMPWA',
   'panel.title': 'LLMPWA 流水线工作台',
@@ -69,6 +81,12 @@ export const zh = {
   'panel.error.reference': '无法读取参考文件：',
   'panel.tabs.dag': 'DAG',
   'panel.tabs.docs': '文档',
+  'panel.tabs.tasks': '任务',
+  'panel.tasksTitle': '拟合任务记录',
+  'panel.tasksEmpty': '该 analysis 还没有拟合任务。',
+  'panel.task.filesTitle': '文件',
+  'panel.task.popupTitle': '任务',
+  'panel.task.resizePopup': '调整任务面板高度',
   'panel.openAgent': '打开 Agent',
   'panel.drawerTitle': '分析 Agent',
   'panel.drawerAgentLaunch': '在工作目录启动 Agent',
@@ -79,7 +97,9 @@ export const zh = {
   'panel.copy': '复制',
   'panel.copied': '已复制',
   'panel.footnotes': '脚注',
+  'panel.htmlPreview': 'HTML 文档',
   'panel.error.agent': '无法打开 Agent 会话：',
 } as const
 
+/** Every key present in the workbench copy dictionaries, used to type the locale namespace. */
 export type LlmpwaKey = keyof typeof en

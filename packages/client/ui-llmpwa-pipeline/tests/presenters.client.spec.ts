@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import {
-  buildDag, buildParamRows, formatValue, groupArtifacts, statusOf,
+  buildDag, buildParamRows, buildTaskView, formatPeriod, formatValue, groupArtifacts, statusOf, taskStatusOf,
 } from '../src/client/presenters.ts'
 
 describe('statusOf', () => {
@@ -121,6 +121,12 @@ describe('buildParamRows', () => {
     expect(formatValue([1, 'a'])).toBe('[1, a]')
     expect(formatValue(3)).toBe('3')
     expect(formatValue(3.5)).toBe('3.5')
+    // Nested scalar kinds: an array element that is null, an object, and one
+    // with no JSON form each round-trip through stringifyScalar.
+    expect(formatValue([null])).toBe('[null]')
+    expect(formatValue([{ a: 1 }])).toBe('[{"a":1}]')
+    expect(formatValue([() => 1])).toBe('[[function]]')
+    expect(formatValue([1n])).toBe('[[value]]')
   })
 })
 
@@ -135,5 +141,80 @@ describe('groupArtifacts', () => {
       { category: 'fit', files: ['a.json'] },
       { category: 'plots', files: ['p.png', 'q.png'] },
     ])
+  })
+})
+
+describe('taskStatusOf', () => {
+  it('resolves each documented lifecycle status', () => {
+    expect(taskStatusOf('running')).toBe('running')
+    expect(taskStatusOf('completed')).toBe('completed')
+    expect(taskStatusOf('failed')).toBe('failed')
+    expect(taskStatusOf('paused')).toBe('paused')
+  })
+
+  it('defaults an unknown or missing status to running', () => {
+    expect(taskStatusOf(undefined)).toBe('running')
+    expect(taskStatusOf('weird')).toBe('running')
+    expect(taskStatusOf(null)).toBe('running')
+  })
+})
+
+describe('buildTaskView', () => {
+  it('resolves the status and flattens the environment rows', () => {
+    const model = buildTaskView({
+      task_id: 't1',
+      title: 'Run 100',
+      status: 'completed',
+      date_start: '2026-09-12',
+      date_end: '2026-09-13',
+      environment: { host: 'HEP1', gpu: '2xRTX', python_env: 'kk_fit' },
+      task_type: 'fit_multistart',
+    })
+    expect(model.status).toEqual({ name: 'completed', status: 'completed', labelKey: 'completed' })
+    expect(model.environmentRows).toEqual([
+      { key: 'host', value: 'HEP1' },
+      { key: 'gpu', value: '2xRTX' },
+      { key: 'python_env', value: 'kk_fit' },
+    ])
+  })
+
+  it('yields empty rows for a task that omits environment', () => {
+    const model = buildTaskView({ task_id: 't1', status: 'running' })
+    expect(model.status.status).toBe('running')
+    expect(model.environmentRows).toEqual([])
+  })
+
+  it('skips absent and empty fields in a flattened block', () => {
+    // The record deliberately carries values outside the document contract
+    // (null / empty-string / undefined) to pin the defensive skip behavior, so
+    // the environment block is cast away from the typed TaskEnvironmentDecl.
+    const model = buildTaskView({
+      task_id: 't1',
+      status: 'completed',
+      environment: { host: '', gpu: null, python_env: 'venv' } as never,
+    })
+    expect(model.environmentRows).toEqual([{ key: 'python_env', value: 'venv' }])
+  })
+
+  it('defaults an unknown status to running even with a full record', () => {
+    const model = buildTaskView({ task_id: 't1', status: 'done' as never })
+    expect(model.status.status).toBe('running')
+  })
+})
+
+describe('formatPeriod', () => {
+  it('formats a full start → end period', () => {
+    expect(formatPeriod('2026-09-12', '2026-09-13')).toBe('2026-09-12 → 2026-09-13')
+  })
+
+  it('falls back to the sole timestamp when one side is unset', () => {
+    expect(formatPeriod('2026-09-12', undefined)).toBe('2026-09-12')
+    expect(formatPeriod(undefined, '2026-09-13')).toBe('2026-09-13')
+    expect(formatPeriod(null, '2026-09-13')).toBe('2026-09-13')
+  })
+
+  it('renders an em dash when both sides are unset', () => {
+    expect(formatPeriod(undefined, undefined)).toBe('—')
+    expect(formatPeriod(null, null)).toBe('—')
   })
 })

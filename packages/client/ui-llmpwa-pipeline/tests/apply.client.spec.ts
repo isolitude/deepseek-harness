@@ -43,10 +43,18 @@ async function boot() {
     }),
   }
   const workspaceFiles = { list: vi.fn(), read: vi.fn() }
-  const sessions = { create: vi.fn(), open: vi.fn() }
+  const sessions = { create: vi.fn() }
+  const workspaces = {
+    list: { getSnapshot: (): { items: [] } => ({ items: [] }) },
+    create: vi.fn(),
+    attachSession: vi.fn(),
+  }
+  const uiWorkspace = { openSession: vi.fn() }
   ctx.provide('slots', slots as never)
   ctx.provide('locale', locale as never)
   ctx.provide('sessions', sessions as never)
+  ctx.provide('workspaces', workspaces as never)
+  ctx.provide('uiWorkspace', uiWorkspace as never)
   ctx.provide('remote', { workspaceFiles } as never)
   ctx.provide('remote.workspaceFiles', workspaceFiles as never)
   const fiber = ctx.plugin({ inject: [...inject], apply })

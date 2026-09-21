@@ -1,13 +1,16 @@
 /**
  * Render one reference file's text as a real document rather than a pre block.
  * Markdown files render through the shared GFM renderer (with shiki-highlighted
- * code fences); other file types render as a syntax-highlighted code block via
- * the shared shiki highlighter. Unknown or absent languages fall back to a
- * plain pre so nothing renders unstyled or errors.
+ * code fences) and resolve relative images against the file's directory; HTML
+ * files render in a sandboxed iframe; other file types render as a
+ * syntax-highlighted code block via the shared shiki highlighter. Unknown or
+ * absent languages fall back to a plain pre so nothing renders unstyled.
  */
 import { memo, useMemo } from 'react'
+import type { ReactNode } from 'react'
 import { CodeBlock, MarkdownText } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { MarkdownLabels } from '@deepseek-ai/dsh-client-ui-primitives'
+import type { MarkdownLabels, MarkdownPathImages } from '@deepseek-ai/dsh-client-ui-primitives'
+import { themedHtml } from './html-theme.ts'
 import css from './Workbench.module.css'
 
 /** A `ReferenceDocument` render call's locale seat. */
@@ -16,12 +19,16 @@ export interface ReferenceDocumentProps {
   path: string
   /** The reference file's full text. */
   text: string
-  /** Locale seat: resolves the markdown/code chrome copy. */
-  t: (key: 'panel.copy' | 'panel.copied' | 'panel.footnotes') => string
+  /** The workspace root's canonical host path; resolves relative markdown images. */
+  workspacePath?: string | undefined
+  /** Locale seat: resolves the markdown/code chrome copy and the HTML frame label. */
+  t: (key: 'panel.copy' | 'panel.copied' | 'panel.footnotes' | 'panel.htmlPreview') => string
 }
 
 /** File extensions rendered as full markdown (not a code block). */
 const MARKDOWN_EXTENSIONS = new Set(['md', 'markdown', 'mdx'])
+/** File extensions rendered as a live HTML document (not highlighted code). */
+const HTML_EXTENSIONS = new Set(['html', 'htm'])
 
 /** Extension → shiki grammar id, mirroring ui-primitives' alias table. */
 const LANG_BY_EXTENSION: Readonly<Record<string, string>> = {
@@ -68,6 +75,12 @@ export function isMarkdownReference(path: string): boolean {
   return extension !== undefined && MARKDOWN_EXTENSIONS.has(extension)
 }
 
+/** Whether a reference path is an HTML file (rendered as a live document). */
+export function isHtmlReference(path: string): boolean {
+  const extension = extensionOf(path)
+  return extension !== undefined && HTML_EXTENSIONS.has(extension)
+}
+
 /** Resolve a reference path to a shiki grammar id, or `undefined` for plain text. */
 export function referenceLang(path: string): string | undefined {
   const extension = extensionOf(path)
@@ -83,13 +96,68 @@ function markdownLabels(t: ReferenceDocumentProps['t']): MarkdownLabels {
 }
 
 /**
- * Render one reference file as a document: GFM for markdown, shiki-highlighted
- * code for other types, and a plain pre (no background) as the safe fallback.
+ * Build the markdown image vocabularly for one reference file: relative image
+ * destinations resolve to the same-origin `/api/file` endpoint against the
+ * file's own directory, so an analysis's `![...](fig4_whitened.png)` renders
+ * its figure instead of an empty alt. Absolute host paths and `data:`/remote
+ * destinations pass through (the renderer checks their protocol); only a page
+ * served over HTTP(S) resolves local files.
+ * @param workspacePath - the workspace root's canonical host path.
+ * @param filePath - the reference file's workspace-relative path.
+ * @param protocol - the page's URL protocol at render time (defaults to the live window).
+ * @param origin - the page's URL origin at render time (defaults to the live window).
+ * @returns the image resolver, or `undefined` when local files cannot be served.
  */
-export const ReferenceDocument = memo(function ReferenceDocument({ path, text, t }: ReferenceDocumentProps) {
+export function buildPathImages(
+  workspacePath: string | undefined,
+  filePath: string,
+  protocol = window.location.protocol,
+  origin = window.location.origin,
+): MarkdownPathImages | undefined {
+  if (workspacePath === undefined) return undefined
+  if (protocol !== 'http:' && protocol !== 'https:') return undefined
+  const slash = filePath.lastIndexOf('/')
+  const baseDir = slash < 0 ? '' : filePath.slice(0, slash)
+  return {
+    /* v8 ignore next -- listReferenceFiles always builds a `dir/name` path, so the empty base join is defensive. */
+    resolve: (value: string): string | undefined => {
+      if (value.length === 0 || value.startsWith('//') || value.includes('\0')) return undefined
+      const absolute = value.startsWith('/') ? value : `${workspacePath}/${baseDir}/${value}`
+      return `${origin}/api/file?path=${encodeURIComponent(absolute)}`
+    },
+  }
+}
+
+/**
+ * Render the file as a live HTML document inside an opaque-origin sandboxed
+ * iframe. The LLMPWA reports (matplotlib HTML exports) embed their figures as
+ * inline `data:` URIs, so `srcDoc` renders them fully without the parent page
+ * access; the `sandbox="allow-scripts"` keeps the document isolated from the
+ * application origin (it cannot reach the workspace or the authenticated file
+ * API). A `srcDoc` avoids a network round trip and keeps the panel free of a
+ * transient blob URL.
+ * @param text - the HTML document source.
+ * @param label - the localized frame label (accessibility name).
+ * @returns a sandboxed iframe, keyed by the document so a new source remounts it.
+ */
+export function HtmlPreview({ text, label }: { text: string; label: string }): ReactNode {
+  /* v8 ignore next -- a stable key ties the iframe to the document so srcDoc changes remount it. */
+  return <iframe className={css.refHtml} sandbox="allow-scripts" title={label} srcDoc={themedHtml(text)} data-html-preview />
+}
+
+/**
+ * Render one reference file as a document: GFM for markdown, a live HTML
+ * document for `.html`, shiki-highlighted code for other types, and a plain pre
+ * (no background) as the safe fallback.
+ */
+export const ReferenceDocument = memo(function ReferenceDocument({ path, text, workspacePath, t }: ReferenceDocumentProps) {
   const labels = useMemo(() => markdownLabels(t), [t])
+  const pathImages = useMemo(() => buildPathImages(workspacePath, path), [workspacePath, path])
   if (isMarkdownReference(path)) {
-    return <MarkdownText text={text} labels={labels} />
+    return <MarkdownText text={text} labels={labels} pathImages={pathImages} />
+  }
+  if (isHtmlReference(path)) {
+    return <HtmlPreview text={text} label={t('panel.htmlPreview')} />
   }
   const lang = referenceLang(path)
   if (lang === undefined) {

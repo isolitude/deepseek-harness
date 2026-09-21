@@ -11,7 +11,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { useSyncExternalStore } from 'react'
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { Workbench, type WorkbenchOverlayProps } from '../src/client/Workbench.tsx'
 import { createWorkbenchStore } from '../src/client/store.ts'
@@ -38,6 +38,7 @@ function makeProps(options: {
   sessionIds?: string[]
   running?: string[]
   byId?: Record<string, { running?: boolean; cwd?: string }>
+  workspaces?: Array<{ path: string; sessionIds: string[] }>
 } = {}): {
   props: WorkbenchOverlayProps
   instance: ReturnType<ReturnType<typeof createWorkbenchStore>['create']>
@@ -45,6 +46,9 @@ function makeProps(options: {
   loadSnapshot: ReturnType<typeof vi.fn>
   listReferences: ReturnType<typeof vi.fn>
   loadReference: ReturnType<typeof vi.fn>
+  listTasks: ReturnType<typeof vi.fn>
+  listTaskDir: ReturnType<typeof vi.fn>
+  loadTaskFile: ReturnType<typeof vi.fn>
   openAgent: ReturnType<typeof vi.fn>
   newAgent: ReturnType<typeof vi.fn>
 } {
@@ -53,6 +57,9 @@ function makeProps(options: {
   const loadSnapshot = vi.fn()
   const listReferences = vi.fn()
   const loadReference = vi.fn()
+  const listTasks = vi.fn()
+  const listTaskDir = vi.fn()
+  const loadTaskFile = vi.fn()
   const openAgent = vi.fn()
   const newAgent = vi.fn()
   const session = 'session' in options ? options.session : 's1'
@@ -60,36 +67,54 @@ function makeProps(options: {
     ? options.sessionIds
     : (session === undefined ? [] : [session])
   const running = 'running' in options ? options.running : []
+  // The workbench follows the main conversation: the row the main view owns.
+  // `retainedBy.mainView` marks it; `byId` keeps a row for any non-main session
+  // so the cwd match can still select the project workspace.
+  const byIdSource = options.byId ?? Object.fromEntries(
+    sessionIds.map(id => [id, { running: running.includes(id) }]),
+  )
+  const mainRow = session === undefined
+    ? undefined
+    : { ...(byIdSource[session] ?? {}), running: running.includes(session), retainedBy: { mainView: 1 } }
+  const rows: Record<string, { running?: boolean; cwd?: string; retainedBy?: { mainView: number } }> = {
+    ...byIdSource,
+    ...(session === undefined ? {} : { [session]: mainRow! }),
+  }
+  // The stub also serves the `useSessions(s => s.byId)` read, so `cwd` arrives
+  // on the main row through the caller-provided byId.
   const props = {
     // A reactive store seat so store-mutating actions re-render the panel, as
     // the slot runtime's observableHook does.
     useStore: (sel: (s: ReturnType<typeof instance.getSnapshot>) => unknown) =>
       useSyncExternalStore(listener => instance.subscribe(listener), () => sel(instance.getSnapshot())),
     useSessions: (sel: (s: {
-      current: string | undefined
-      byId: Record<string, { running?: boolean; cwd?: string }>
-    }) => unknown) => sel({
-      current: session,
-      byId: options.byId ?? Object.fromEntries(sessionIds.map(id => [id, { running: running.includes(id) }])),
-    }),
+      byId: Record<string, { running?: boolean; cwd?: string; retainedBy?: { mainView: number } }>
+    }) => unknown) => sel({ byId: rows }),
     useWorkspaces: (sel: (s: { items: Array<{ path: string; sessionIds: string[] }> }) => unknown) =>
-      sel({ items: [{ path: '/ws', sessionIds }] }),
+      sel({ items: options.workspaces ?? [{ path: '/ws', sessionIds }] }),
     actions: instance.actions,
     t: (key: string) => key,
     listAnalyses,
     loadSnapshot,
     listReferences,
     loadReference,
+    listTasks,
+    listTaskDir,
+    loadTaskFile,
     openAgent,
     newAgent,
     // The drawer renders a live conversation.visible conversation; the spec
     // stubs renderSlot to assert the slot is requested for the agent session.
     renderSlot: (_key: string) => <div data-testid="embedded-chat-stub" />,
   } as unknown as WorkbenchOverlayProps
-  return { props, instance, listAnalyses, loadSnapshot, listReferences, loadReference, openAgent, newAgent }
+  return {
+    props, instance, listAnalyses, loadSnapshot, listReferences, loadReference,
+    listTasks, listTaskDir, loadTaskFile, openAgent, newAgent,
+  }
 }
 
 const openDocs = (): void => { fireEvent.click(screen.getByRole('button', { name: 'panel.tabs.docs' })) }
+const openTasks = (): void => { fireEvent.click(screen.getByRole('button', { name: 'panel.tabs.tasks' })) }
 
 describe('Workbench', () => {
   it('renders nothing while closed', () => {
@@ -105,6 +130,40 @@ describe('Workbench', () => {
     render(<Workbench {...props} />)
     expect(listAnalyses).toHaveBeenCalledWith('/ws', 's1', expect.any(AbortSignal))
     expect(screen.getByRole('button', { name: 'kk_dis' })).toBeTruthy()
+  })
+
+  it('resolves the analyses against the project workspace, not the current analysis workspace', () => {
+    // The current conversation session is an analysis agent session (its cwd is
+    // the analysis directory), now grouped into the analysis workspace. The
+    // workbench must still read `LLMPWA/analyses` from the project root, so it
+    // uses a session whose cwd is the project workspace, not the analysis one.
+    const { props, instance, listAnalyses } = makeProps({
+      session: 'agent-session',
+      byId: { 'agent-session': { cwd: '/ws/LLMPWA/analyses/kk_dis' }, 'root-session': { cwd: '/ws' } },
+      workspaces: [
+        { path: '/ws', sessionIds: ['root-session'] },
+        { path: '/ws/LLMPWA/analyses/kk_dis', sessionIds: ['agent-session'] },
+      ],
+    })
+    instance.actions.opened()
+    instance.actions.listed([{ dir: 'kk_dis' }])
+    render(<Workbench {...props} />)
+    expect(listAnalyses).toHaveBeenCalledWith('/ws', 'root-session', expect.any(AbortSignal))
+  })
+
+  it('falls back to a primary workspace session when the current cwd matches no workspace', () => {
+    const { props, instance, listAnalyses } = makeProps({
+      session: 'unrelated',
+      byId: { unrelated: { cwd: '/elsewhere' }, 'root-session': { cwd: '/ws' } },
+      workspaces: [
+        { path: '/ws', sessionIds: ['root-session'] },
+        { path: '/ws/LLMPWA/analyses/kk_dis', sessionIds: ['agent-session'] },
+      ],
+    })
+    instance.actions.opened()
+    instance.actions.listed([{ dir: 'kk_dis' }])
+    render(<Workbench {...props} />)
+    expect(listAnalyses).toHaveBeenCalledWith('/ws', 'root-session', expect.any(AbortSignal))
   })
 
   it('renders the selected analysis DAG from a ready snapshot', () => {
@@ -740,5 +799,303 @@ describe('Workbench', () => {
     act(() => { instance.actions.opened() })
     expect(instance.getSnapshot().selected).toBe('kk_dis')
     unmount()
+  })
+
+  it('renders a task card grid when the tasks tab is opened', () => {
+    const { props, instance, listTasks } = makeProps()
+    instance.actions.opened()
+    instance.actions.listed([{ dir: 'kk_dis' }])
+    instance.actions.selected('kk_dis')
+    instance.actions.tasksReady([{ id: 't1', dir: 'LLMPWA/analyses/kk_dis/task/t1' }])
+    instance.actions.taskStatusReady('t1', {
+      task_id: 't1', title: 'Run 100', status: 'completed', task_type: 'fit_multistart',
+      date_start: '2026-09-12', date_end: '2026-09-13',
+      environment: { host: 'HEP1', gpu: '2xRTX', python_env: 'kk_fit' },
+    })
+    render(<Workbench {...props} />)
+    openTasks()
+    expect(instance.getSnapshot().view).toBe('tasks')
+    expect(listTasks).toHaveBeenCalledWith('s1', 'kk_dis', expect.any(AbortSignal))
+    const card = screen.getByTestId('llmpwa-task-card-t1')
+    expect(screen.getByText('Run 100')).toBeTruthy()
+    expect(screen.getByText('fit_multistart')).toBeTruthy()
+    expect(screen.getByText(/2026-09-12 → 2026-09-13/)).toBeTruthy()
+    expect(screen.getByText(/HEP1/)).toBeTruthy()
+    expect(card).toBeTruthy()
+  })
+
+  it('shows an empty-tasks message when the analysis has no tasks', () => {
+    const { props, instance } = makeProps()
+    instance.actions.opened()
+    instance.actions.listed([{ dir: 'kk_dis' }])
+    instance.actions.selected('kk_dis')
+    instance.actions.tasksReady([])
+    render(<Workbench {...props} />)
+    openTasks()
+    expect(screen.getByText('panel.tasksEmpty')).toBeTruthy()
+  })
+
+  it('shows the tasks loading line while the list is in flight with no tasks', () => {
+    const { props, instance } = makeProps()
+    instance.actions.opened()
+    instance.actions.listed([{ dir: 'kk_dis' }])
+    instance.actions.selected('kk_dis')
+    instance.actions.tasksLoading()
+    render(<Workbench {...props} />)
+    openTasks()
+    expect(screen.getByText('panel.reloading')).toBeTruthy()
+  })
+
+  it('renders a card for a task with no readable status, degrading to the directory name', () => {
+    const { props, instance } = makeProps()
+    instance.actions.opened()
+    instance.actions.listed([{ dir: 'kk_dis' }])
+    instance.actions.selected('kk_dis')
+    instance.actions.tasksReady([{ id: 't1', dir: 'LLMPWA/analyses/kk_dis/task/t1' }])
+    render(<Workbench {...props} />)
+    openTasks()
+    // No status loaded yet: the card shows the directory name as its title.
+    expect(screen.getByTestId('llmpwa-task-card-t1')).toBeTruthy()
+    expect(screen.getByText('t1')).toBeTruthy()
+  })
+
+  it('renders every card status dot color across failed and paused tasks', () => {
+    const { props, instance } = makeProps()
+    instance.actions.opened()
+    instance.actions.listed([{ dir: 'kk_dis' }])
+    instance.actions.selected('kk_dis')
+    instance.actions.tasksReady([
+      { id: 't1', dir: 'LLMPWA/analyses/kk_dis/task/t1' },
+      { id: 't2', dir: 'LLMPWA/analyses/kk_dis/task/t2' },
+    ])
+    instance.actions.taskStatusReady('t1', { task_id: 't1', status: 'failed' })
+    instance.actions.taskStatusReady('t2', { task_id: 't2', status: 'paused' })
+    render(<Workbench {...props} />)
+    openTasks()
+    expect(screen.getByTestId('llmpwa-task-card-t1')).toBeTruthy()
+    expect(screen.getByTestId('llmpwa-task-card-t2')).toBeTruthy()
+  })
+
+  it('opens the task popup from a card and seeds the file tree root', () => {
+    const { props, instance, listTaskDir } = makeProps()
+    instance.actions.opened()
+    instance.actions.listed([{ dir: 'kk_dis' }])
+    instance.actions.selected('kk_dis')
+    instance.actions.tasksReady([{ id: 't1', dir: 'LLMPWA/analyses/kk_dis/task/t1' }])
+    render(<Workbench {...props} />)
+    openTasks()
+    fireEvent.click(screen.getByTestId('llmpwa-task-card-t1'))
+    expect(instance.getSnapshot().selectedTask).toBe('t1')
+    expect(instance.getSnapshot().taskOpen).toBe(true)
+    expect(listTaskDir).toHaveBeenCalledWith('s1', 'LLMPWA/analyses/kk_dis/task/t1', expect.any(AbortSignal))
+  })
+
+  it('renders the task file tree root and loads a directory branch on toggle', () => {
+    const { props, instance, listTaskDir } = makeProps()
+    instance.actions.opened()
+    instance.actions.listed([{ dir: 'kk_dis' }])
+    instance.actions.selected('kk_dis')
+    instance.actions.tasksReady([{ id: 't1', dir: 'LLMPWA/analyses/kk_dis/task/t1' }])
+    instance.actions.taskOpened('t1')
+    instance.actions.taskDirReady('LLMPWA/analyses/kk_dis/task/t1', [
+      { path: 'LLMPWA/analyses/kk_dis/task/t1/status.json', name: 'status.json', kind: 'file' },
+      { path: 'LLMPWA/analyses/kk_dis/task/t1/3_报告', name: '3_报告', kind: 'directory' },
+    ])
+    render(<Workbench {...props} />)
+    openTasks()
+    expect(screen.getByRole('button', { name: 'status.json' })).toBeTruthy()
+    // The directory is not expanded yet; toggling it loads its children.
+    fireEvent.click(screen.getByRole('button', { name: /3_报告/ }))
+    expect(instance.getSnapshot().taskTreeExpanded).toEqual(['LLMPWA/analyses/kk_dis/task/t1/3_报告'])
+    expect(listTaskDir).toHaveBeenCalledWith('s1', 'LLMPWA/analyses/kk_dis/task/t1/3_报告', expect.any(AbortSignal))
+    act(() => {
+      instance.actions.taskDirReady('LLMPWA/analyses/kk_dis/task/t1/3_报告', [
+        { path: 'LLMPWA/analyses/kk_dis/task/t1/3_报告/r.md', name: 'r.md', kind: 'file' },
+      ])
+    })
+    expect(screen.getByRole('button', { name: 'r.md' })).toBeTruthy()
+    // Collapsing an already-listed directory does not trigger another read.
+    const callsAfterExpand = listTaskDir.mock.calls.length
+    fireEvent.click(screen.getByRole('button', { name: /3_报告/ }))
+    expect(instance.getSnapshot().taskTreeExpanded).toEqual([])
+    expect(listTaskDir.mock.calls.length).toBe(callsAfterExpand)
+  })
+
+  it('shows the tree loading line while a directory is being listed', () => {
+    const { props, instance } = makeProps()
+    instance.actions.opened()
+    instance.actions.listed([{ dir: 'kk_dis' }])
+    instance.actions.selected('kk_dis')
+    instance.actions.tasksReady([{ id: 't1', dir: 'LLMPWA/analyses/kk_dis/task/t1' }])
+    instance.actions.taskOpened('t1')
+    instance.actions.taskDirReady('LLMPWA/analyses/kk_dis/task/t1', [
+      { path: 'LLMPWA/analyses/kk_dis/task/t1/3_报告', name: '3_报告', kind: 'directory' },
+    ])
+    instance.actions.taskDirLoading('LLMPWA/analyses/kk_dis/task/t1/3_报告')
+    render(<Workbench {...props} />)
+    openTasks()
+    fireEvent.click(screen.getByRole('button', { name: /3_报告/ }))
+    expect(screen.getAllByText('panel.reloading').length).toBeGreaterThan(0)
+  })
+
+  it('loads a task file text when its tree file is clicked', () => {
+    const { props, instance, loadTaskFile } = makeProps()
+    instance.actions.opened()
+    instance.actions.listed([{ dir: 'kk_dis' }])
+    instance.actions.selected('kk_dis')
+    instance.actions.tasksReady([{ id: 't1', dir: 'LLMPWA/analyses/kk_dis/task/t1' }])
+    instance.actions.taskOpened('t1')
+    instance.actions.taskDirReady('LLMPWA/analyses/kk_dis/task/t1', [
+      { path: 'LLMPWA/analyses/kk_dis/task/t1/3_报告/r.md', name: 'r.md', kind: 'file' },
+    ])
+    render(<Workbench {...props} />)
+    openTasks()
+    fireEvent.click(screen.getByRole('button', { name: 'r.md' }))
+    expect(loadTaskFile).toHaveBeenCalledWith('s1', 'LLMPWA/analyses/kk_dis/task/t1/3_报告/r.md', expect.any(AbortSignal))
+  })
+
+  it('renders the selected task file text as a document', () => {
+    const { props, instance } = makeProps()
+    instance.actions.opened()
+    instance.actions.listed([{ dir: 'kk_dis' }])
+    instance.actions.selected('kk_dis')
+    instance.actions.tasksReady([{ id: 't1', dir: 'LLMPWA/analyses/kk_dis/task/t1' }])
+    instance.actions.taskOpened('t1')
+    instance.actions.taskDirReady('LLMPWA/analyses/kk_dis/task/t1', [
+      { path: 'LLMPWA/analyses/kk_dis/task/t1/3_报告/r.md', name: 'r.md', kind: 'file' },
+    ])
+    instance.actions.taskFileReady('LLMPWA/analyses/kk_dis/task/t1/3_报告/r.md', '# Report\n\nBody text.')
+    render(<Workbench {...props} />)
+    openTasks()
+    expect(screen.getByRole('heading', { level: 1, name: 'Report' })).toBeTruthy()
+  })
+
+  it('renders a task HTML report as a live sandboxed document', () => {
+    const { props, instance } = makeProps()
+    instance.actions.opened()
+    instance.actions.listed([{ dir: 'kk_dis' }])
+    instance.actions.selected('kk_dis')
+    instance.actions.tasksReady([{ id: 't1', dir: 'LLMPWA/analyses/kk_dis/task/t1' }])
+    instance.actions.taskOpened('t1')
+    instance.actions.taskDirReady('LLMPWA/analyses/kk_dis/task/t1', [
+      { path: 'LLMPWA/analyses/kk_dis/task/t1/3_报告/report.html', name: 'report.html', kind: 'file' },
+    ])
+    instance.actions.taskFileReady(
+      'LLMPWA/analyses/kk_dis/task/t1/3_报告/report.html',
+      '<!doctype html><html><body><h1>Report</h1></body></html>',
+    )
+    const { container } = render(<Workbench {...props} />)
+    openTasks()
+    const frame = container.querySelector('iframe')
+    expect(frame).toBeTruthy()
+    expect(frame?.getAttribute('sandbox')).toBe('allow-scripts')
+    expect(frame?.getAttribute('srcdoc')).toContain('<h1>Report</h1>')
+    // No code-block banner is drawn for the HTML document.
+    expect(screen.queryByRole('button', { name: 'panel.copy' })).toBeNull()
+  })
+
+  it('shows a task file read error and retries the same file', () => {
+    const { props, instance, loadTaskFile } = makeProps()
+    instance.actions.opened()
+    instance.actions.listed([{ dir: 'kk_dis' }])
+    instance.actions.selected('kk_dis')
+    instance.actions.tasksReady([{ id: 't1', dir: 'LLMPWA/analyses/kk_dis/task/t1' }])
+    instance.actions.taskOpened('t1')
+    instance.actions.taskDirReady('LLMPWA/analyses/kk_dis/task/t1', [
+      { path: 'LLMPWA/analyses/kk_dis/task/t1/3_报告/r.md', name: 'r.md', kind: 'file' },
+    ])
+    instance.actions.taskFileFailed('LLMPWA/analyses/kk_dis/task/t1/3_报告/r.md', { kind: 'unexpected', message: 'no' })
+    render(<Workbench {...props} />)
+    openTasks()
+    expect(screen.getByText(/panel\.error\.reference/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'panel.error.retry' }))
+    expect(loadTaskFile).toHaveBeenCalledWith('s1', 'LLMPWA/analyses/kk_dis/task/t1/3_报告/r.md', expect.any(AbortSignal))
+  })
+
+  it('shows the task-file select hint before a file is chosen', () => {
+    const { props, instance } = makeProps()
+    instance.actions.opened()
+    instance.actions.listed([{ dir: 'kk_dis' }])
+    instance.actions.selected('kk_dis')
+    instance.actions.tasksReady([{ id: 't1', dir: 'LLMPWA/analyses/kk_dis/task/t1' }])
+    instance.actions.taskOpened('t1')
+    instance.actions.taskDirReady('LLMPWA/analyses/kk_dis/task/t1', [
+      { path: 'LLMPWA/analyses/kk_dis/task/t1/a.md', name: 'a.md', kind: 'file' },
+    ])
+    render(<Workbench {...props} />)
+    openTasks()
+    expect(screen.getByText('panel.referenceSelectHint')).toBeTruthy()
+  })
+
+  it('shows the task-file loading text while a file read is in flight', () => {
+    const { props, instance } = makeProps()
+    instance.actions.opened()
+    instance.actions.listed([{ dir: 'kk_dis' }])
+    instance.actions.selected('kk_dis')
+    instance.actions.tasksReady([{ id: 't1', dir: 'LLMPWA/analyses/kk_dis/task/t1' }])
+    instance.actions.taskOpened('t1')
+    instance.actions.taskDirReady('LLMPWA/analyses/kk_dis/task/t1', [
+      { path: 'LLMPWA/analyses/kk_dis/task/t1/a.md', name: 'a.md', kind: 'file' },
+    ])
+    instance.actions.taskFileLoading('LLMPWA/analyses/kk_dis/task/t1/a.md')
+    render(<Workbench {...props} />)
+    openTasks()
+    expect(screen.getAllByText('panel.reloading').length).toBeGreaterThan(0)
+  })
+
+  it('collapses the task popup to a strip on backdrop click and expands back', () => {
+    const { props, instance } = makeProps()
+    instance.actions.opened()
+    instance.actions.listed([{ dir: 'kk_dis' }])
+    instance.actions.selected('kk_dis')
+    instance.actions.tasksReady([{ id: 't1', dir: 'LLMPWA/analyses/kk_dis/task/t1' }])
+    instance.actions.taskOpened('t1')
+    render(<Workbench {...props} />)
+    openTasks()
+    expect(screen.getByTestId('llmpwa-task-popup')).toBeTruthy()
+    // Clicking the page behind collapses the popup to the title strip.
+    fireEvent.click(screen.getByTestId('llmpwa-task-backdrop'))
+    expect(instance.getSnapshot().taskCollapsed).toBe(true)
+    expect(screen.getByTestId('llmpwa-task-strip')).toBeTruthy()
+    fireEvent.click(screen.getByTestId('llmpwa-task-strip'))
+    expect(instance.getSnapshot().taskCollapsed).toBe(false)
+  })
+
+  it('adjusts the task popup height by dragging its resize handle', () => {
+    const { props, instance } = makeProps()
+    instance.actions.opened()
+    instance.actions.listed([{ dir: 'kk_dis' }])
+    instance.actions.selected('kk_dis')
+    instance.actions.tasksReady([{ id: 't1', dir: 'LLMPWA/analyses/kk_dis/task/t1' }])
+    instance.actions.taskOpened('t1')
+    instance.actions.setTaskHeight(300)
+    render(<Workbench {...props} />)
+    openTasks()
+    const handle = screen.getByTestId('llmpwa-task-resize')
+    // Move/up before a down is a no-op (no drag origin captured yet).
+    fireEvent.pointerMove(handle, { clientY: 400 })
+    fireEvent.pointerUp(handle, { clientY: 400 })
+    expect(instance.getSnapshot().taskHeight).toBe(300)
+    // Dragging the handle downward shrinks the popup (origin.height + (y - clientY)).
+    fireEvent.pointerDown(handle, { clientY: 400 })
+    expect(instance.getSnapshot().taskHeight).toBe(300)
+    fireEvent.pointerMove(handle, { clientY: 460 })
+    expect(instance.getSnapshot().taskHeight).toBeLessThan(300)
+    fireEvent.pointerUp(handle, { clientY: 460 })
+    expect(instance.getSnapshot().taskHeight).toBeLessThan(300)
+  })
+
+  it('closes the task popup and clears the selection', () => {
+    const { props, instance } = makeProps()
+    instance.actions.opened()
+    instance.actions.listed([{ dir: 'kk_dis' }])
+    instance.actions.selected('kk_dis')
+    instance.actions.tasksReady([{ id: 't1', dir: 'LLMPWA/analyses/kk_dis/task/t1' }])
+    instance.actions.taskOpened('t1')
+    render(<Workbench {...props} />)
+    openTasks()
+    fireEvent.click(within(screen.getByTestId('llmpwa-task-popup')).getByRole('button', { name: 'panel.close' }))
+    expect(instance.getSnapshot().taskOpen).toBe(false)
+    expect(instance.getSnapshot().selectedTask).toBeUndefined()
   })
 })

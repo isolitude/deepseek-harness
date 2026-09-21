@@ -258,3 +258,143 @@ export function groupArtifacts(
     .filter(([, files]) => files.length > 0)
     .map(([category, files]) => ({ category, files }))
 }
+
+/** A fit task's lifecycle status, as `status.json` reports it. */
+export type TaskStatus = 'running' | 'completed' | 'failed' | 'paused'
+
+/** The stable status of one fit task. */
+export interface TaskStatusView {
+  readonly name: string
+  readonly status: TaskStatus
+  /** Human label key, resolved by the caller through `t`. */
+  readonly labelKey: TaskStatus
+}
+
+/** The `summary` block of a task's `status.json`, all optional (a running task has none). */
+export interface TaskSummaryDecl {
+  readonly n_starts?: number
+  readonly n_success?: number
+  readonly success_rate?: number
+  readonly best_nll?: number
+  readonly best_start?: number
+  readonly near_global_frac?: number
+  readonly wall_clock_h?: number
+  [key: string]: unknown
+}
+
+/** The `artifacts` block of a task's `status.json`, all optional. */
+export interface TaskArtifactsDecl {
+  readonly code_dir?: string
+  readonly records_dir?: string
+  readonly reports_dir?: string
+  readonly images_dir?: string
+  readonly generator_logs_dir?: string
+  readonly remote_work_dir?: string
+  readonly summary_files?: readonly string[]
+  [key: string]: unknown
+}
+
+/** The `environment` block of a task's `status.json`, all optional. */
+export interface TaskEnvironmentDecl {
+  readonly host?: string
+  readonly gpu?: string
+  readonly python_env?: string
+  [key: string]: unknown
+}
+
+/** One parsed fit-task record, read from `<analysis>/task/<id>/status.json`. */
+export interface TaskRecord {
+  readonly task_id?: string
+  readonly title?: string
+  readonly status?: TaskStatus
+  readonly date_start?: string | null
+  readonly date_end?: string | null
+  readonly environment?: TaskEnvironmentDecl
+  readonly task_type?: string
+  readonly summary?: TaskSummaryDecl
+  readonly artifacts?: TaskArtifactsDecl
+  readonly reports?: readonly string[]
+  readonly issues_fixed?: readonly string[]
+  readonly notes?: string
+  [key: string]: unknown
+}
+
+/** A label/value row for a flattened task section (summary metrics or artifacts). */
+export interface TaskRow {
+  readonly key: string
+  readonly value: string
+}
+
+/** The task display model the Tasks tab renders. */
+export interface TaskView {
+  readonly task: TaskRecord
+  readonly status: TaskStatusView
+  readonly environmentRows: readonly TaskRow[]
+}
+
+/** The lifecycle statuses a task can report, in the palette's canonical order. */
+const TASK_STATUSES: readonly TaskStatus[] = ['running', 'completed', 'failed', 'paused']
+
+/**
+ * Resolve a task's lifecycle status.
+ * @param status - the raw `status` field from `status.json`, unknown when absent.
+ * @returns a known status; an unknown or missing value defaults to `running`
+ * (a task folder without a settled status is conservatively in progress).
+ */
+export function taskStatusOf(status: unknown): TaskStatus {
+  return TASK_STATUSES.find(s => status === s) ?? 'running'
+}
+
+/**
+ * Flatten a record's plain fields into ordered label/value rows, skipping
+ * absent and empty fields. A nested object or an array is formatted with
+ * {@link formatValue} so no row shows the type-only shape.
+ * @param record - the optional block (summary, artifacts, environment).
+ * @param fields - the field names to emit, in display order.
+ * @returns the non-empty rows.
+ */
+function rowsOf(
+  record: Readonly<Record<string, unknown>> | undefined,
+  fields: readonly string[],
+): readonly TaskRow[] {
+  if (record === undefined) return []
+  const rows: TaskRow[] = []
+  for (const key of fields) {
+    const value = record[key]
+    if (value === undefined || value === null || value === '') continue
+    rows.push({ key, value: formatValue(value) })
+  }
+  return rows
+}
+
+/** Environment fields shown on the status card, in display order. */
+const ENVIRONMENT_FIELDS: readonly string[] = ['host', 'gpu', 'python_env']
+
+/**
+ * Build the task display model: a resolved status and the flattened
+ * environment rows. A running or failed task that omits `environment` yields
+ * empty rows rather than an error.
+ * @param task - the parsed `status.json` record.
+ * @returns the display model.
+ */
+export function buildTaskView(task: TaskRecord): TaskView {
+  const status = taskStatusOf(task.status)
+  return {
+    task,
+    status: { name: status, status, labelKey: status },
+    environmentRows: rowsOf(task.environment, ENVIRONMENT_FIELDS),
+  }
+}
+
+/**
+ * Format a task's start/end timestamps into a period string.
+ * @param start - the task's ISO start timestamp, or null/undefined when unset.
+ * @param end - the task's ISO end timestamp, or null/undefined when unset.
+ * @returns a `start → end` string, or the sole timestamp, or an em dash.
+ */
+export function formatPeriod(start: string | null | undefined, end: string | null | undefined): string {
+  if (start === undefined || start === null) {
+    return end === undefined || end === null ? '—' : end
+  }
+  return end === undefined || end === null ? start : `${start} → ${end}`
+}

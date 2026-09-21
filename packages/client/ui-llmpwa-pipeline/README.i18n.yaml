@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/client/ui-llmpwa-pipeline/README.md
-README.md: 358e87688fd873b462961240572b5d3f57881cd6
-README.zh.md: c09ae7479b9b242d7d6c2391a1e68190379a26f9
+README.md: f901340e44e4d63ee64edbe2d37bc14af5c671d5
+README.zh.md: f7ec18d7974709d5530f7b71014df34fa16f6834

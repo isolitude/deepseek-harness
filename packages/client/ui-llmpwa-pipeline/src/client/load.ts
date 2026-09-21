@@ -16,7 +16,7 @@ import type {
   WorkspaceFileWrite,
   WorkspaceFileWriteRequest,
 } from '@deepseek-ai/dsh-api-workspace-files/types'
-import type { PipelineSnapshot } from './presenters.ts'
+import type { PipelineSnapshot, TaskRecord } from './presenters.ts'
 
 /** The LLMPWA analyses root, workspace-relative. */
 export const ANALYSES_ROOT = 'LLMPWA/analyses'
@@ -26,6 +26,10 @@ export const PIPELINE_STATE_FILE = 'gen/pipeline_state.json'
 export const AGENT_SETTINGS_DIR = '.dsh'
 /** The per-analysis settings filename holding the agent session id. */
 export const AGENT_SETTINGS_FILE = 'agent.json'
+/** The per-analysis task-records directory, inside each analysis. */
+export const TASKS_ROOT = 'task'
+/** The task metadata filename inside each task directory. */
+export const TASK_STATUS_FILE = 'status.json'
 
 /** One analysis: its directory name and, when known, a config file. */
 export interface Analysis {
@@ -93,6 +97,28 @@ export interface WorkspaceFilesLoadRemote {
     ) => Promise<RemoteResult<WorkspaceFileWrite>>
   }
 }
+
+/** One task directory under an analysis's `task/` root. */
+export interface TaskEntry {
+  /** The task's directory name (the `task_id`, e.g. `20260912_run100随机初值拟合_bench双卡对比`). */
+  readonly id: string
+  /** Workspace-relative directory path under the analysis. */
+  readonly dir: string
+}
+
+/** One child shown in the task file tree: a file or a subdirectory. */
+export interface TaskTreeEntry {
+  /** Workspace-relative path, passed to the `read` endpoint (file) or `list` (directory). */
+  readonly path: string
+  /** Short name shown in the tree. */
+  readonly name: string
+  readonly kind: 'file' | 'directory'
+}
+
+/** A completed task-status load. */
+export type TaskLoad =
+  | { readonly ok: true; readonly task: TaskRecord }
+  | { readonly ok: false; readonly error: SnapshotError }
 
 /** An alias for the remote the load functions bind to. */
 export type WorkspaceFilesReadRemote = WorkspaceFilesLoadRemote
@@ -274,8 +300,22 @@ export function analysisSettingsPath(analysis: string): string {
   return `${ANALYSES_ROOT}/${analysis}/${AGENT_SETTINGS_DIR}/${AGENT_SETTINGS_FILE}`
 }
 
-/** One session-list row the analysis lookup reads: its working directory. */
-type SessionCwdRow = { readonly cwd?: string }
+/** One session-list row the analysis lookup reads: its working directory and ownership counts. */
+type SessionCwdRow = { readonly cwd?: string; readonly retainedBy?: Readonly<Partial<Record<string, number>>> }
+
+/**
+ * Resolve the main conversation session: the live row owned by the main view.
+ * Navigation is owner-owned, so `SessionListState` carries no `current`; the
+ * view owner's `mainView` reference count is the canonical selection signal.
+ * @param rows - the current session-list rows, keyed by session id.
+ * @returns the main session id, or `undefined` when no session is selected.
+ */
+export function mainSessionId(rows: Readonly<Record<string, SessionCwdRow>>): SessionId | undefined {
+  for (const [id, row] of Object.entries(rows)) {
+    if ((row.retainedBy?.mainView ?? 0) > 0) return id as SessionId
+  }
+  return undefined
+}
 
 /**
  * Resolve the analysis whose agent session is the given conversation session.
@@ -287,9 +327,9 @@ type SessionCwdRow = { readonly cwd?: string }
  * `cwd` to the analysis workspace directory — so a session whose relation has
  * not been restored yet (e.g. right after a page reload) still resolves. The
  * `cwd` match is a path suffix against `<workspaceRoot>/LLMPWA/analyses/<analysis>`
- * (not only a join against `workspacePath`), because an analysis agent session
- * may sit in the ungrouped bucket rather than be accounted to the workspace
- * that holds the analyses.
+ * (not only a join against `workspacePath`), so an analysis agent session is
+ * recovered whether or not it is yet accounted to the workspace that holds the
+ * analyses (e.g. right after a reload, before the per-analysis grouping pass).
  *
  * A session whose `cwd` is not an analysis directory (an ordinary chat or an
  * unrelated workspace session) resolves to no analysis, so the panel keeps its
@@ -387,4 +427,135 @@ export async function writeAnalysisAgentSession(
  */
 export function missingSnapshotHint(analysis: string): string {
   return `python LLMPWA/agent/pipeline_state.py -w LLMPWA/analyses/${analysis} -c llm_config_fit.toml -o gen/pipeline_state.json`
+}
+
+/**
+ * The workspace path of an analysis's task root.
+ * @param analysis - the selected analysis directory.
+ * @returns the workspace-relative task directory.
+ */
+export function analysisTasksPath(analysis: string): string {
+  return `${ANALYSES_ROOT}/${analysis}/${TASKS_ROOT}`
+}
+
+/**
+ * The workspace path of one task's `status.json`.
+ * @param analysis - the selected analysis directory.
+ * @param task - the task directory name.
+ * @returns the workspace-relative status file path.
+ */
+export function taskStatusPath(analysis: string, task: string): string {
+  return `${analysisTasksPath(analysis)}/${task}/${TASK_STATUS_FILE}`
+}
+
+/**
+ * The workspace path of one task's directory root.
+ * @param analysis - the selected analysis directory.
+ * @param task - the task directory name.
+ * @returns the workspace-relative task directory.
+ */
+export function taskDirPath(analysis: string, task: string): string {
+  return `${analysisTasksPath(analysis)}/${task}`
+}
+
+/**
+ * List an analysis's task directories under `<analysis>/task`. A missing or
+ * unreadable task root contributes nothing, so an analysis with no tasks (e.g.
+ * one whose pipeline has not run a fit) yields an empty result.
+ * @param remote - the Client Remote.
+ * @param sessionId - the session whose workspace resolves the paths.
+ * @param analysis - the selected analysis directory.
+ * @param signal - cancels the call.
+ * @returns the task directories, ordered by name; empty on failure.
+ */
+export async function listTasks(
+  remote: WorkspaceFilesLoadRemote,
+  sessionId: SessionId,
+  analysis: string,
+  signal: AbortSignal,
+): Promise<readonly TaskEntry[]> {
+  const root = analysisTasksPath(analysis)
+  const result = await remote.workspaceFiles.list(sessionId, root, signal)
+  if (!result.ok) return []
+  return result.value.entries
+    .filter(entry => entry.type === 'directory')
+    .map(entry => ({ id: entry.name, dir: `${root}/${entry.name}` }))
+}
+
+/**
+ * Load and parse one task's `status.json`, walking the Host's capped pages.
+ * @param remote - the Client Remote.
+ * @param sessionId - the session whose workspace resolves the path.
+ * @param analysis - the selected analysis directory.
+ * @param task - the task directory name.
+ * @param signal - cancels the call.
+ * @returns a structured load result.
+ */
+export async function loadTaskStatus(
+  remote: WorkspaceFilesLoadRemote,
+  sessionId: SessionId,
+  analysis: string,
+  task: string,
+  signal: AbortSignal,
+): Promise<TaskLoad> {
+  const paged = await readPaged(remote, sessionId, taskStatusPath(analysis, task), signal)
+  if (!paged.ok) return { ok: false, error: paged.error }
+  try {
+    const parsed: unknown = JSON.parse(paged.text)
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return { ok: false, error: { kind: 'parse', message: 'Task status is not a JSON object.' } }
+    }
+    return { ok: true, task: parsed as TaskRecord }
+  } catch (cause) {
+    return {
+      ok: false,
+      error: {
+        kind: 'parse',
+        // v8 ignore next -- JSON.parse throws a native SyntaxError (an Error), so the string arm is unreachable.
+        message: cause instanceof Error ? cause.message : String(cause),
+      },
+    }
+  }
+}
+
+/**
+ * List one directory's direct children for the task file tree. A missing or
+ * unreadable directory contributes nothing, so a freshly created task shows
+ * only what it actually holds and a subdirectory that cannot be listed simply
+ * does not expand.
+ * @param remote - the Client Remote.
+ * @param sessionId - the session whose workspace resolves the path.
+ * @param path - the directory's workspace-relative path.
+ * @param signal - cancels the call.
+ * @returns the direct children, in the backend's name order; empty on failure.
+ */
+export async function listTaskDir(
+  remote: WorkspaceFilesLoadRemote,
+  sessionId: SessionId,
+  path: string,
+  signal: AbortSignal,
+): Promise<readonly TaskTreeEntry[]> {
+  const result = await remote.workspaceFiles.list(sessionId, path, signal)
+  if (!result.ok) return []
+  return result.value.entries
+    .filter((entry): entry is WorkspaceDirectoryEntry & { type: 'file' | 'directory' } =>
+      entry.type === 'file' || entry.type === 'directory')
+    .map(entry => ({ path: `${path}/${entry.name}`, name: entry.name, kind: entry.type }))
+}
+
+/**
+ * Read one task file's full text, walking the Host's capped pages.
+ * @param remote - the Client Remote.
+ * @param sessionId - the session whose workspace resolves the path.
+ * @param path - the task file's workspace-relative path.
+ * @param signal - cancels the call.
+ * @returns the full text, or a structured read failure.
+ */
+export async function loadTaskFileText(
+  remote: WorkspaceFilesLoadRemote,
+  sessionId: SessionId,
+  path: string,
+  signal: AbortSignal,
+): Promise<ReferenceLoad> {
+  return readPaged(remote, sessionId, path, signal)
 }

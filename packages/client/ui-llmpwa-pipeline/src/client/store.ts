@@ -11,11 +11,11 @@
  */
 import { defineStore, type EngineStoreHandle } from '@deepseek-ai/dsh-client-store'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
-import type { Analysis, ReferenceFile, SnapshotError } from './load.ts'
-import type { PipelineSnapshot } from './presenters.ts'
+import type { Analysis, ReferenceFile, SnapshotError, TaskEntry, TaskTreeEntry } from './load.ts'
+import type { PipelineSnapshot, TaskRecord } from './presenters.ts'
 
 /** The active preview tab. */
-export type WorkbenchView = 'dag' | 'docs'
+export type WorkbenchView = 'dag' | 'docs' | 'tasks'
 
 /** Whether a snapshot load is idle, running, or settled. */
 export type SnapshotPhase =
@@ -56,6 +56,28 @@ export interface WorkbenchState {
   referencesListing: boolean
   /** The reference-file read phase for the currently previewed file. */
   reference: ReferencePhase
+  /** The selected analysis's fit-task directories; empty until listed. */
+  tasks: readonly TaskEntry[]
+  /** Whether the tasks list is being fetched. */
+  tasksListing: boolean
+  /** Each task's parsed `status.json`, keyed by task id, for the card summary. */
+  taskStatuses: Readonly<Record<string, TaskRecord>>
+  /** The task currently shown in the bottom popup; undefined when none is open. */
+  selectedTask: string | undefined
+  /** Whether the bottom task popup is open. */
+  taskOpen: boolean
+  /** Whether the expanded task popup is collapsed to a narrow bottom strip. */
+  taskCollapsed: boolean
+  /** The task popup's height in pixels, adjustable by dragging its top handle. */
+  taskHeight: number
+  /** The expanded directories of the task file tree, workspace-relative paths. */
+  taskTreeExpanded: readonly string[]
+  /** The task file tree's children by directory, keyed by directory path. */
+  taskTree: Readonly<Record<string, readonly TaskTreeEntry[]>>
+  /** Whether a directory's children are being fetched (keyed by directory path). */
+  taskTreeListing: Readonly<Record<string, boolean>>
+  /** The task-file read phase for the currently previewed file. */
+  taskFile: ReferencePhase
   /** The active preview tab. */
   view: WorkbenchView
   /** The agent drawer's width in pixels, adjustable by dragging its handle. */
@@ -89,6 +111,28 @@ type WorkbenchActions = {
   referenceLoading: (draft: WorkbenchState, path: string) => void
   referenceReady: (draft: WorkbenchState, path: string, text: string) => void
   referenceFailed: (draft: WorkbenchState, path: string, error: SnapshotError) => void
+  tasksLoading: (draft: WorkbenchState) => void
+  tasksReady: (draft: WorkbenchState, tasks: readonly TaskEntry[]) => void
+  taskStatusReady: (draft: WorkbenchState, task: string, record: TaskRecord) => void
+  /** Open the bottom popup for one task. */
+  taskOpened: (draft: WorkbenchState, task: string) => void
+  /** Close the bottom task popup. */
+  taskClosed: (draft: WorkbenchState) => void
+  /** Collapse the expanded task popup to its narrow bottom strip. */
+  taskCollapse: (draft: WorkbenchState) => void
+  /** Expand the collapsed task popup back to its full height. */
+  taskExpand: (draft: WorkbenchState) => void
+  /** Set the task popup's height in pixels. */
+  setTaskHeight: (draft: WorkbenchState, height: number) => void
+  /** Mark one directory's children read as in flight. */
+  taskDirLoading: (draft: WorkbenchState, path: string) => void
+  /** Record one directory's tree children. */
+  taskDirReady: (draft: WorkbenchState, path: string, entries: readonly TaskTreeEntry[]) => void
+  /** Toggle one directory's expansion in the task file tree. */
+  taskDirToggle: (draft: WorkbenchState, path: string) => void
+  taskFileLoading: (draft: WorkbenchState, path: string) => void
+  taskFileReady: (draft: WorkbenchState, path: string, text: string) => void
+  taskFileFailed: (draft: WorkbenchState, path: string, error: SnapshotError) => void
   agentOpened: (draft: WorkbenchState) => void
   agentClosed: (draft: WorkbenchState) => void
   agentCollapse: (draft: WorkbenchState) => void
@@ -120,6 +164,17 @@ export function createWorkbenchStore(): EngineStoreHandle<WorkbenchState, Workbe
       references: [],
       referencesListing: false,
       reference: { kind: 'idle' },
+      tasks: [],
+      tasksListing: false,
+      taskStatuses: {},
+      selectedTask: undefined,
+      taskOpen: false,
+      taskCollapsed: false,
+      taskHeight: 400,
+      taskTreeExpanded: [],
+      taskTree: {},
+      taskTreeListing: {},
+      taskFile: { kind: 'idle' },
       view: 'dag',
       drawerWidth: 320,
       agentOpen: false,
@@ -150,6 +205,16 @@ export function createWorkbenchStore(): EngineStoreHandle<WorkbenchState, Workbe
         d.references = []
         d.referencesListing = true
         d.reference = { kind: 'idle' }
+        d.tasks = []
+        d.tasksListing = true
+        d.taskStatuses = {}
+        d.selectedTask = undefined
+        d.taskOpen = false
+        d.taskCollapsed = false
+        d.taskTreeExpanded = []
+        d.taskTree = {}
+        d.taskTreeListing = {}
+        d.taskFile = { kind: 'idle' }
         d.view = 'dag'
         d.agentOpen = false
         d.agentCollapsed = false
@@ -181,6 +246,65 @@ export function createWorkbenchStore(): EngineStoreHandle<WorkbenchState, Workbe
       referenceReady: (d, path, text) => { d.reference = { kind: 'ready', path, text } },
       /** Record why the reference file could not be read. */
       referenceFailed: (d, path, error) => { d.reference = { kind: 'failed', path, error } },
+      /** Mark the tasks list read as in flight. */
+      tasksLoading: (d) => { d.tasksListing = true },
+      /** Record the discovered task directories. */
+      tasksReady: (d, tasks) => {
+        d.tasks = tasks
+        d.tasksListing = false
+      },
+      /** Keep one task's parsed status for its card summary. */
+      taskStatusReady: (d, task, record) => {
+        d.taskStatuses = { ...d.taskStatuses, [task]: record }
+      },
+      /** Open the bottom popup for one task. */
+      taskOpened: (d, task) => {
+        d.selectedTask = task
+        d.taskOpen = true
+        d.taskCollapsed = false
+        d.taskTreeExpanded = []
+        d.taskTree = {}
+        d.taskTreeListing = {}
+        d.taskFile = { kind: 'idle' }
+      },
+      /** Close the bottom task popup. */
+      taskClosed: (d) => {
+        d.taskOpen = false
+        d.selectedTask = undefined
+        d.taskCollapsed = false
+        d.taskTreeExpanded = []
+        d.taskTree = {}
+        d.taskTreeListing = {}
+        d.taskFile = { kind: 'idle' }
+      },
+      /** Collapse the expanded task popup to its narrow bottom strip. */
+      taskCollapse: (d) => { d.taskCollapsed = true },
+      /** Expand the collapsed task popup back to its full height. */
+      taskExpand: (d) => { d.taskCollapsed = false },
+      /** Set the task popup's height in pixels. */
+      setTaskHeight: (d, height) => { d.taskHeight = height },
+      /** Mark one directory's tree children read as in flight. */
+      taskDirLoading: (d, path) => {
+        d.taskTreeListing = { ...d.taskTreeListing, [path]: true }
+      },
+      /** Record one directory's tree children. */
+      taskDirReady: (d, path, entries) => {
+        d.taskTree = { ...d.taskTree, [path]: entries }
+        d.taskTreeListing = { ...d.taskTreeListing, [path]: false }
+      },
+      /** Toggle one directory's expansion in the task file tree. */
+      taskDirToggle: (d, path) => {
+        const expanded = d.taskTreeExpanded.includes(path)
+          ? d.taskTreeExpanded.filter(p => p !== path)
+          : [...d.taskTreeExpanded, path]
+        d.taskTreeExpanded = expanded
+      },
+      /** Mark the selected task file's read as in flight. */
+      taskFileLoading: (d, path) => { d.taskFile = { kind: 'loading', path } },
+      /** Keep the loaded task file text. */
+      taskFileReady: (d, path, text) => { d.taskFile = { kind: 'ready', path, text } },
+      /** Record why the task file could not be read. */
+      taskFileFailed: (d, path, error) => { d.taskFile = { kind: 'failed', path, error } },
       /** Open the agent drawer for the selected analysis. */
       agentOpened: (d) => {
         d.agentOpen = true

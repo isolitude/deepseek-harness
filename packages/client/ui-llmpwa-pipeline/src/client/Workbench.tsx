@@ -17,15 +17,29 @@ import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { InjectFace, PropsLocale, PropsRenderSlots, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { PropsStore } from '@deepseek-ai/dsh-client-store'
 import { writeClipboard } from '@deepseek-ai/dsh-client-ui-primitives'
+import { StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
+import type { StateDotState } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { WorkbenchInjected } from './face.ts'
 import {
   analysisForSession,
   analysisWorkspaceCwd,
+  mainSessionId,
   missingSnapshotHint,
+  taskDirPath,
   type Analysis,
   type ReferenceFile,
+  type TaskEntry,
+  type TaskTreeEntry,
 } from './load.ts'
-import { buildDag, type DagModel } from './presenters.ts'
+import {
+  buildDag,
+  buildTaskView,
+  formatPeriod,
+  type DagModel,
+  type TaskRecord,
+  type TaskStatus,
+  type TaskView,
+} from './presenters.ts'
 import { ReferenceDocument } from './reference-document.tsx'
 import { Dag } from './Dag.tsx'
 import type {
@@ -46,10 +60,52 @@ export type WorkbenchOverlayProps =
   & PropsRenderSlots<'conversation.embedded'>
 
 /** A preview tab descriptor: its id and localized label key. */
-const TABS: ReadonlyArray<{ readonly id: WorkbenchView; readonly labelKey: 'panel.tabs.dag' | 'panel.tabs.docs' }> = [
+const TABS: ReadonlyArray<{ readonly id: WorkbenchView; readonly labelKey: 'panel.tabs.dag' | 'panel.tabs.docs' | 'panel.tabs.tasks' }> = [
   { id: 'dag', labelKey: 'panel.tabs.dag' },
   { id: 'docs', labelKey: 'panel.tabs.docs' },
+  { id: 'tasks', labelKey: 'panel.tabs.tasks' },
 ]
+
+/**
+ * The workspace slice the read-session selection needs.
+ */
+interface ReadWorkspaceCandidate {
+  readonly path: string
+  readonly sessionIds: readonly SessionId[]
+}
+
+/**
+ * Select the workspace that holds `LLMPWA/analyses` and a session whose own
+ * `cwd` is that workspace's root (so the `workspaceFiles` listing resolves the
+ * analyses root against the project root, not an analysis directory). The
+ * current conversation session is often an analysis agent session whose cwd is
+ * the analysis directory, so its own workspace is the analysis, not the project
+ * root: prefer the workspace whose path is a strict ancestor of the current
+ * cwd, then the workspace matching the cwd exactly, then the workspace holding
+ * the most sessions (the primary project workspace).
+ * @param openWorkspaces - the visible workspace list.
+ * @param currentCwd - the current conversation session's cwd, when known.
+ * @returns the selected workspace and one of its accounted session ids, or
+ * `undefined` when no workspace has an accounted session.
+ */
+function selectReadWorkspace(
+  openWorkspaces: readonly ReadWorkspaceCandidate[],
+  currentCwd: string | undefined,
+): { workspace: ReadWorkspaceCandidate; readSessionId: SessionId } | undefined {
+  if (openWorkspaces.length === 0) return undefined
+  const ancestor = currentCwd === undefined
+    ? undefined
+    : openWorkspaces.find(workspace => currentCwd.startsWith(`${workspace.path}/`))
+  const exact = currentCwd === undefined
+    ? undefined
+    : openWorkspaces.find(workspace => currentCwd === workspace.path)
+  const primary = openWorkspaces.find(workspace => workspace.sessionIds.length > 0)
+  const candidate = ancestor ?? exact ?? primary
+  const readSessionId = candidate?.sessionIds[0]
+  return candidate === undefined || readSessionId === undefined
+    ? undefined
+    : { workspace: candidate, readSessionId }
+}
 
 /**
  * Render the workbench panel.
@@ -58,7 +114,8 @@ const TABS: ReadonlyArray<{ readonly id: WorkbenchView; readonly labelKey: 'pane
  */
 export function Workbench(props: WorkbenchOverlayProps): ReactNode {
   const state = props.useStore(s => s)
-  const sessionId = props.useSessions(s => s).current
+  const sessionId = props.useSessions(s => mainSessionId(s.byId))
+  const sessionsById = props.useSessions(s => s.byId)
   const workspaces = props.useWorkspaces(s => s).items
   const {
     open,
@@ -69,6 +126,17 @@ export function Workbench(props: WorkbenchOverlayProps): ReactNode {
     references,
     referencesListing,
     reference,
+    tasks,
+    tasksListing,
+    taskStatuses,
+    selectedTask,
+    taskOpen,
+    taskCollapsed,
+    taskHeight,
+    taskTreeExpanded,
+    taskTree,
+    taskTreeListing,
+    taskFile,
     view,
     drawerWidth,
     agentOpen,
@@ -79,18 +147,10 @@ export function Workbench(props: WorkbenchOverlayProps): ReactNode {
 
   // Session run flags for agent sessions opened from this panel, keyed by
   // analysis directory. Read once so the list can flag each running agent.
-  const sessionsById = props.useSessions(s => s.byId)
-
-  // File reads resolve against a session whose working directory is the LLMPWA
-  // workspace root. The active conversation session may be an unrelated nested
-  // agent session (e.g. one opened from this panel, whose cwd is the analysis
-  // directory), so prefer a session owned by the workspace holding the analyses
-  // over the raw "current" session.
-  const readWorkspace = sessionId !== undefined
-    ? workspaces.find(w => w.sessionIds.includes(sessionId)) ?? workspaces.find(w => w.sessionIds.length > 0)
-    : workspaces.find(w => w.sessionIds.length > 0)
-  const readSessionId = readWorkspace?.sessionIds[0]
-  const workspacePath = readWorkspace?.path
+  const currentCwd = sessionId !== undefined ? sessionsById[sessionId]?.cwd : undefined
+  const read = selectReadWorkspace(workspaces, currentCwd)
+  const readSessionId = read?.readSessionId
+  const workspacePath = read?.workspace.path
 
   // The panel is a live slot that stays mounted, so `open` flips rather than
   // remounting. Track the conversation session id whose analysis we last
@@ -101,6 +161,9 @@ export function Workbench(props: WorkbenchOverlayProps): ReactNode {
   const snapshotController = useRef<AbortController | undefined>(undefined)
   const refsController = useRef<AbortController | undefined>(undefined)
   const refTextController = useRef<AbortController | undefined>(undefined)
+  const tasksController = useRef<AbortController | undefined>(undefined)
+  const taskDirController = useRef<AbortController | undefined>(undefined)
+  const taskFileController = useRef<AbortController | undefined>(undefined)
   // The agent drawer is resized by dragging a handle in the preview row. The
   // handle is a sibling of the drawer, so the width is bounded by the row's
   // own width: the drawer may grow to the row width less the preview floor.
@@ -143,6 +206,48 @@ export function Workbench(props: WorkbenchOverlayProps): ReactNode {
     }
   }
 
+  // The bottom task popup is resized by dragging its top handle vertically. The
+  // handle is a sibling in the preview row, so the height is bounded by the
+  // row's own height: the popup may grow to the row height less the card floor.
+  const taskDragOrigin = useRef<{ y: number; height: number } | undefined>(undefined)
+
+  const minTaskHeight = 160
+  // The card floor is the space the popup leaves at the bottom so the task-card
+  // grid behind it stays visible. A small floor lets the popup rise close to the
+  // row's full height when the user drags the handle up.
+  const taskFloor = 90
+  const clampTaskHeight = (height: number): number => {
+    const row = rowRef.current
+    /* v8 ignore next -- the task resize handle renders inside the row owning rowRef, so the row is always mounted during a drag. */
+    const max = row === null ? 640 : Math.max(taskFloor, row.clientHeight - taskFloor)
+    return Math.min(Math.max(height, minTaskHeight), max)
+  }
+
+  function beginTaskResize(event: React.PointerEvent<HTMLDivElement>): void {
+    event.preventDefault()
+    /* v8 ignore next -- jsdom and some hosts leave Pointer capture undefined; the drag still works without it. */
+    if (typeof event.currentTarget.setPointerCapture === 'function') {
+      event.currentTarget.setPointerCapture(event.pointerId)
+    }
+    taskDragOrigin.current = { y: event.clientY, height: taskHeight }
+  }
+
+  function taskResize(event: React.PointerEvent<HTMLDivElement>): void {
+    const origin = taskDragOrigin.current
+    if (origin === undefined) return
+    // Dragging the top handle up (decreasing clientY) grows the popup.
+    props.actions.setTaskHeight(clampTaskHeight(origin.height + (origin.y - event.clientY)))
+  }
+
+  function endTaskResize(event: React.PointerEvent<HTMLDivElement>): void {
+    if (taskDragOrigin.current === undefined) return
+    taskDragOrigin.current = undefined
+    /* v8 ignore next -- jsdom and some hosts leave Pointer capture undefined; releasing is a no-op when it never captured. */
+    if (typeof event.currentTarget.hasPointerCapture === 'function' && event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+  }
+
   // List analyses when the panel opens or the read session changes. The
   // component never awaits; the face dispatches the result through the store.
   useEffect(() => {
@@ -173,6 +278,28 @@ export function Workbench(props: WorkbenchOverlayProps): ReactNode {
     props.listReferences(readSessionId, selected, controller.signal)
     return () => { controller.abort() }
   }, [open, readSessionId, selected, props.listReferences])
+
+  // List the selected analysis's fit tasks when a selection is active; each
+  // task's status is loaded for its card.
+  useEffect(() => {
+    if (!open || readSessionId === undefined || selected === undefined) return
+    tasksController.current?.abort()
+    const controller = new AbortController()
+    tasksController.current = controller
+    props.listTasks(readSessionId, selected, controller.signal)
+    return () => { controller.abort() }
+  }, [open, readSessionId, selected, props.listTasks])
+
+  // When the bottom popup opens for a task, seed the file tree with the task
+  // root's children so the top level is browsable.
+  useEffect(() => {
+    if (!open || readSessionId === undefined || selected === undefined || selectedTask === undefined || !taskOpen) return
+    taskDirController.current?.abort()
+    const dirController = new AbortController()
+    taskDirController.current = dirController
+    props.listTaskDir(readSessionId, taskDirPath(selected, selectedTask), dirController.signal)
+    return () => { dirController.abort() }
+  }, [open, readSessionId, selected, selectedTask, taskOpen, props.listTaskDir])
 
   // Follow the main conversation: when the current session maps to one of the
   // listed analyses (its agent session), switch the panel to that analysis. The
@@ -300,7 +427,15 @@ export function Workbench(props: WorkbenchOverlayProps): ReactNode {
                   <div className={css.mainPreview}>
                     {view === 'dag'
                       ? snapshotView(snapshot, dag, props.t, retry, selected)
-                      : docsView(references, referencesListing, reference, props.t, selectReference)}
+                      : view === 'docs'
+                        ? docsView(references, referencesListing, reference, workspacePath, props.t, selectReference)
+                        : tasksGrid(
+                          tasks,
+                          tasksListing,
+                          taskStatuses,
+                          props.t,
+                          openTask,
+                        )}
                   </div>
                   {agentOpen
                     ? <>
@@ -334,6 +469,41 @@ export function Workbench(props: WorkbenchOverlayProps): ReactNode {
                           beginResize,
                           resize,
                           endResize,
+                        )}
+                    </>
+                    : null}
+                  {taskOpen
+                    ? <>
+                      {/* Clicking the page behind the bottom task popup collapses it
+                       * to a bottom strip so the card grid stays visible. */}
+                      {!taskCollapsed
+                        ? <div className={css.taskBackdrop} data-testid="llmpwa-task-backdrop" onClick={() => { props.actions.taskCollapse() }} />
+                        : null}
+                      {taskCollapsed
+                        ? <button
+                          type="button"
+                          className={css.taskStrip}
+                          data-testid="llmpwa-task-strip"
+                          onClick={() => { props.actions.taskExpand() }}
+                        >
+                          {props.t('panel.task.popupTitle')}
+                        </button>
+                        : taskPopup(
+                          selected,
+                          selectedTask,
+                          taskTreeExpanded,
+                          taskTree,
+                          taskTreeListing,
+                          taskFile,
+                          taskHeight,
+                          workspacePath,
+                          props.t,
+                          toggleTaskDir,
+                          selectTaskFile,
+                          () => { props.actions.taskClosed() },
+                          beginTaskResize,
+                          taskResize,
+                          endTaskResize,
                         )}
                     </>
                     : null}
@@ -375,6 +545,35 @@ export function Workbench(props: WorkbenchOverlayProps): ReactNode {
     const controller = new AbortController()
     refTextController.current = controller
     props.loadReference(readSessionId, path, controller.signal)
+  }
+
+  function openTask(task: string): void {
+    /* v8 ignore next -- the task cards render only after a workspace read session, so the arm is defensive. */
+    if (readSessionId === undefined) return
+    props.actions.taskOpened(task)
+  }
+
+  function toggleTaskDir(path: string): void {
+    /* v8 ignore next -- the tree renders only after a workspace read session, so the arm is defensive. */
+    if (readSessionId === undefined) return
+    props.actions.taskDirToggle(path)
+    // When expanding a directory that has not been listed yet, load its
+    // children so the branch materializes.
+    if (!taskTreeExpanded.includes(path) && taskTree[path] === undefined) {
+      taskDirController.current?.abort()
+      const controller = new AbortController()
+      taskDirController.current = controller
+      props.listTaskDir(readSessionId, path, controller.signal)
+    }
+  }
+
+  function selectTaskFile(path: string): void {
+    /* v8 ignore next -- the task-file buttons render only after a workspace read session, so the arm is defensive. */
+    if (readSessionId === undefined) return
+    taskFileController.current?.abort()
+    const controller = new AbortController()
+    taskFileController.current = controller
+    props.loadTaskFile(readSessionId, path, controller.signal)
   }
 
   function openAgent(): void {
@@ -438,6 +637,7 @@ function docsView(
   references: readonly ReferenceFile[],
   listing: boolean,
   reference: ReferencePhase,
+  workspacePath: string | undefined,
   t: WorkbenchOverlayProps['t'],
   select: (path: string) => void,
 ): ReactNode {
@@ -469,7 +669,7 @@ function docsView(
           </button>
         ))}
       </div>
-      {referencePreview(reference, t, select)}
+      {referencePreview(reference, workspacePath, t, select)}
     </div>
   )
 }
@@ -477,6 +677,7 @@ function docsView(
 /** Render the selected reference file's text phase. */
 function referencePreview(
   reference: ReferencePhase,
+  workspacePath: string | undefined,
   t: WorkbenchOverlayProps['t'],
   select: (path: string) => void,
 ): ReactNode {
@@ -498,7 +699,220 @@ function referencePreview(
   }
   return (
     <div className={css.refBody}>
-      <ReferenceDocument path={reference.path} text={reference.text} t={t} />
+      <ReferenceDocument path={reference.path} text={reference.text} workspacePath={workspacePath} t={t} />
+    </div>
+  )
+}
+
+/** Map a task lifecycle status to the StateDot palette. */
+function taskDotState(status: TaskStatus): StateDotState {
+  if (status === 'completed') return 'done'
+  if (status === 'running') return 'ongoing'
+  if (status === 'failed') return 'error'
+  return 'warning'
+}
+
+/** Build a task card's display row from its status, or a directory-only row
+ *  when no readable status exists yet (a fresh task that has not recorded one). */
+function taskCardModel(task: string, record: TaskRecord | undefined): TaskView {
+  return record !== undefined
+    ? buildTaskView(record)
+    : buildTaskView({ task_id: task })
+}
+
+/** Render the tasks tab as a grid of task cards. Each card shows the task name,
+ *  status dot, type, period, and environment; clicking it opens the popup. */
+function tasksGrid(
+  tasks: readonly TaskEntry[],
+  listing: boolean,
+  statuses: Readonly<Record<string, TaskRecord>>,
+  t: WorkbenchOverlayProps['t'],
+  open: (id: string) => void,
+): ReactNode {
+  if (listing && tasks.length === 0) {
+    return <div className={css.muted}>{t('panel.reloading')}</div>
+  }
+  if (tasks.length === 0) {
+    return <div className={css.muted}>{t('panel.tasksEmpty')}</div>
+  }
+  return (
+    <div className={css.taskCards} role="list" data-testid="llmpwa-task-cards">
+      {tasks.map((taskEntry) => {
+        const model = taskCardModel(taskEntry.id, statuses[taskEntry.id])
+        return (
+          <button
+            key={taskEntry.id}
+            type="button"
+            role="listitem"
+            className={css.taskCard}
+            onClick={() => { open(taskEntry.id) }}
+            data-testid={`llmpwa-task-card-${taskEntry.id}`}
+          >
+            <span className={css.taskCardTitle}>
+              <StateDot state={taskDotState(model.status.status)} size={10} />
+              <span className={css.taskCardName}>{model.task.title ?? taskEntry.id}</span>
+            </span>
+            <span className={css.taskCardType}>{model.task.task_type ?? '—'}</span>
+            <span className={css.taskCardPeriod}>{formatPeriod(model.task.date_start, model.task.date_end)}</span>
+            {model.environmentRows.length > 0
+              ? <span className={css.taskCardEnv}>{model.environmentRows.map(r => `${r.key}: ${r.value}`).join(' · ')}</span>
+              : null}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+/** Render the bottom task popup. */
+function taskPopup(
+  analysis: string | undefined,
+  task: string | undefined,
+  expanded: readonly string[],
+  tree: Readonly<Record<string, readonly TaskTreeEntry[]>>,
+  listing: Readonly<Record<string, boolean>>,
+  taskFile: ReferencePhase,
+  height: number,
+  workspacePath: string | undefined,
+  t: WorkbenchOverlayProps['t'],
+  toggle: (path: string) => void,
+  selectFile: (path: string) => void,
+  close: () => void,
+  beginResize: (event: React.PointerEvent<HTMLDivElement>) => void,
+  resize: (event: React.PointerEvent<HTMLDivElement>) => void,
+  endResize: (event: React.PointerEvent<HTMLDivElement>) => void,
+): ReactNode {
+  // The popup renders only with a selected analysis and task, so the task dir
+  // is always known here; the empty fallback is a defensive arm that the
+  // render guard makes unreachable.
+  /* v8 ignore next -- the popup renders only when both analysis and task are set, so the fallback is unreachable. */
+  const treeRoot = analysis !== undefined && task !== undefined ? taskDirPath(analysis, task) : ''
+  return (
+    <aside className={css.taskPopup} style={{ height }} role="complementary" data-testid="llmpwa-task-popup">
+      <div
+        className={css.taskResize}
+        data-testid="llmpwa-task-resize"
+        role="separator"
+        aria-orientation="horizontal"
+        aria-label={t('panel.task.resizePopup')}
+        onPointerDown={beginResize}
+        onPointerMove={resize}
+        onPointerUp={endResize}
+        onPointerCancel={endResize}
+      />
+      <div className={css.taskPopupHeader}>
+        <span className={css.taskPopupTitle}>{task as string}</span>
+        <button type="button" className={css.close} onClick={close}>{t('panel.close')}</button>
+      </div>
+      <div className={css.taskPopupBody}>
+        <div className={css.taskTreePane}>
+          <span className={css.sectionTitle}>{t('panel.task.filesTitle')}</span>
+          {taskTree(treeRoot, expanded, tree, listing, taskFile, t, toggle, selectFile)}
+        </div>
+        <div className={css.taskPreviewPane}>
+          {taskFilePreview(taskFile, workspacePath, t, selectFile)}
+        </div>
+      </div>
+    </aside>
+  )
+}
+
+/** Render one directory branch of the task file tree. */
+function treeBranch(
+  path: string,
+  expanded: readonly string[],
+  tree: Readonly<Record<string, readonly TaskTreeEntry[]>>,
+  listing: Readonly<Record<string, boolean>>,
+  taskFile: ReferencePhase,
+  t: WorkbenchOverlayProps['t'],
+  toggle: (path: string) => void,
+  selectFile: (path: string) => void,
+  depth: number,
+): ReactNode {
+  const children = tree[path] ?? []
+  return (
+    <ul className={css.treeBranch} style={{ paddingLeft: depth * 14 }}>
+      {children.map((entry) => {
+        if (entry.kind === 'directory') {
+          return (
+            <li key={entry.path}>
+              <button
+                type="button"
+                className={css.treeDir}
+                data-expanded={expanded.includes(entry.path)}
+                onClick={() => { toggle(entry.path) }}
+                title={entry.path}
+              >
+                <span className={css.treeTwist}>{expanded.includes(entry.path) ? '▾' : '▸'}</span>
+                {entry.name}
+              </button>
+              {expanded.includes(entry.path)
+                ? treeBranch(entry.path, expanded, tree, listing, taskFile, t, toggle, selectFile, depth + 1)
+                : null}
+            </li>
+          )
+        }
+        return (
+          <li key={entry.path}>
+            <button
+              type="button"
+              className={css.treeFile}
+              data-selected={taskFile.kind !== 'idle' && taskFile.path === entry.path}
+              onClick={() => { selectFile(entry.path) }}
+              title={entry.path}
+            >
+              {entry.name}
+            </button>
+          </li>
+        )
+      })}
+      {listing[path] === true
+        ? <li><span className={css.muted}>{t('panel.reloading')}</span></li>
+        : null}
+    </ul>
+  )
+}
+
+/** Render the task file tree, rooted at the task directory. */
+function taskTree(
+  root: string,
+  expanded: readonly string[],
+  tree: Readonly<Record<string, readonly TaskTreeEntry[]>>,
+  listing: Readonly<Record<string, boolean>>,
+  taskFile: ReferencePhase,
+  t: WorkbenchOverlayProps['t'],
+  toggle: (path: string) => void,
+  selectFile: (path: string) => void,
+): ReactNode {
+  return treeBranch(root, expanded, tree, listing, taskFile, t, toggle, selectFile, 0)
+}
+
+/** Render the selected task file's text phase. */
+function taskFilePreview(
+  taskFile: ReferencePhase,
+  workspacePath: string | undefined,
+  t: WorkbenchOverlayProps['t'],
+  selectFile: (path: string) => void,
+): ReactNode {
+  if (taskFile.kind === 'idle') {
+    return <div className={css.muted}>{t('panel.referenceSelectHint')}</div>
+  }
+  if (taskFile.kind === 'loading') {
+    return <div className={css.muted}>{t('panel.reloading')}</div>
+  }
+  if (taskFile.kind === 'failed') {
+    return (
+      <div className={css.error}>
+        <p className={css.errorLine}>{t('panel.error.reference')} {taskFile.error.message}</p>
+        <button type="button" className={css.refresh} onClick={() => { selectFile(taskFile.path) }}>
+          {t('panel.error.retry')}
+        </button>
+      </div>
+    )
+  }
+  return (
+    <div className={css.refBody}>
+      <ReferenceDocument path={taskFile.path} text={taskFile.text} workspacePath={workspacePath} t={t} />
     </div>
   )
 }

@@ -100,7 +100,8 @@ describe('Chat apply wiring', () => {
 
   it('wires the embedded conversation to the per-session Chat node source', async () => {
     const b = await bench()
-    await b.runtime.sessions.add({ id: SID }, { current: true })
+    await b.runtime.sessions.add({ id: SID })
+    using _reference = b.runtime.sessions.retain(SID)
     const row = b.runtime.slots.entries('conversation.embedded')[0]
     if (row === undefined) throw new Error('embedded conversation entry is missing')
     const face = (row.inject as unknown as (sessionId: SessionId) => {
@@ -121,7 +122,8 @@ describe('Chat apply wiring', () => {
 
   it('exposes Chat node and node-process sources through the Chat view inject', async () => {
     const b = await bench()
-    await b.runtime.sessions.add({ id: SID }, { current: true })
+    await b.runtime.sessions.add({ id: SID })
+    using _reference = b.runtime.sessions.retain(SID)
     const row = b.runtime.slots.entries('conversation.view')[0]
     if (row === undefined) throw new Error('Chat view entry is missing')
     const face = (row.inject as unknown as (sessionId: SessionId) => {

@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-12-ssh-keepalive-and-background-exec.md
-2026-09-12-ssh-keepalive-and-background-exec.md: c8d74c1e94e37f10e62ea2b0fc2dd4de824239aa
-2026-09-12-ssh-keepalive-and-background-exec.zh.md: 805de870a03cc2d49fc54f525c02260188500b3d
+2026-09-12-ssh-keepalive-and-background-exec.md: 9f84fa4e7985714bd86be8f004b5c7f40c85a848
+2026-09-12-ssh-keepalive-and-background-exec.zh.md: e9d15aeee9467c47854534cdb30429f2864c8524

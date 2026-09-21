@@ -21,6 +21,17 @@ describe('workbench store', () => {
       references: [],
       referencesListing: false,
       reference: { kind: 'idle' },
+      tasks: [],
+      tasksListing: false,
+      taskStatuses: {},
+      selectedTask: undefined,
+      taskOpen: false,
+      taskCollapsed: false,
+      taskHeight: 400,
+      taskTreeExpanded: [],
+      taskTree: {},
+      taskTreeListing: {},
+      taskFile: { kind: 'idle' },
       view: 'dag',
       drawerWidth: 320,
       agentOpen: false,
@@ -50,6 +61,9 @@ describe('workbench store', () => {
     const instance = createWorkbenchStore().create()
     instance.actions.snapshotReady(snapshot)
     instance.actions.referencesReady([{ path: 'LLMPWA/analyses/kk_dis/resonances_config.toml', name: 'resonances_config.toml' }])
+    instance.actions.tasksReady([{ id: 't1', dir: 'LLMPWA/analyses/kk_dis/task/t1' }])
+    instance.actions.taskOpened('t1')
+    instance.actions.taskDirReady('LLMPWA/analyses/kk_dis/task/t1', [{ path: 'a', name: 'a.md', kind: 'file' }])
     instance.actions.selected('kk_dis')
     const state = instance.getSnapshot()
     expect(state.selected).toBe('kk_dis')
@@ -57,6 +71,14 @@ describe('workbench store', () => {
     expect(state.references).toEqual([])
     expect(state.referencesListing).toBe(true)
     expect(state.reference).toEqual({ kind: 'idle' })
+    expect(state.tasks).toEqual([])
+    expect(state.tasksListing).toBe(true)
+    expect(state.taskStatuses).toEqual({})
+    expect(state.selectedTask).toBeUndefined()
+    expect(state.taskOpen).toBe(false)
+    expect(state.taskCollapsed).toBe(false)
+    expect(state.taskTree).toEqual({})
+    expect(state.taskTreeExpanded).toEqual([])
   })
 
   it('walks the snapshot phase from loading to ready or failed', () => {
@@ -171,5 +193,109 @@ describe('workbench store', () => {
     expect(state.view).toBe('dag')
     expect(state.agentOpen).toBe(false)
     expect(state.agent).toEqual({ kind: 'idle' })
+  })
+
+  it('marks the task list in flight and records the task directories', () => {
+    const instance = createWorkbenchStore().create()
+    instance.actions.tasksLoading()
+    expect(instance.getSnapshot().tasksListing).toBe(true)
+    instance.actions.tasksReady([{ id: 't1', dir: 'LLMPWA/analyses/kk_dis/task/t1' }])
+    expect(instance.getSnapshot()).toMatchObject({
+      tasks: [{ id: 't1', dir: 'LLMPWA/analyses/kk_dis/task/t1' }],
+      tasksListing: false,
+    })
+  })
+
+  it('records a task status and leaves unloaded ones absent', () => {
+    const instance = createWorkbenchStore().create()
+    instance.actions.tasksReady([
+      { id: 't1', dir: 'LLMPWA/analyses/kk_dis/task/t1' },
+      { id: 't2', dir: 'LLMPWA/analyses/kk_dis/task/t2' },
+    ])
+    instance.actions.taskStatusReady('t1', { task_id: 't1', status: 'completed' })
+    expect(instance.getSnapshot().taskStatuses).toEqual({
+      t1: { task_id: 't1', status: 'completed' },
+    })
+  })
+
+  it('opening a task resets its tree and marks nothing in flight', () => {
+    const instance = createWorkbenchStore().create()
+    instance.actions.taskDirReady('LLMPWA/analyses/kk_dis/task/t2', [{ path: 'a', name: 'a.md', kind: 'file' }])
+    instance.actions.taskOpened('t2')
+    const state = instance.getSnapshot()
+    expect(state.selectedTask).toBe('t2')
+    expect(state.taskOpen).toBe(true)
+    expect(state.taskCollapsed).toBe(false)
+    expect(state.taskTreeExpanded).toEqual([])
+    expect(state.taskTree).toEqual({})
+    expect(state.taskTreeListing).toEqual({})
+    expect(state.taskFile).toEqual({ kind: 'idle' })
+  })
+
+  it('closing a task clears the selection and its tree', () => {
+    const instance = createWorkbenchStore().create()
+    instance.actions.taskOpened('t1')
+    instance.actions.taskDirReady('LLMPWA/analyses/kk_dis/task/t1', [{ path: 'a', name: 'a.md', kind: 'file' }])
+    instance.actions.taskClosed()
+    const state = instance.getSnapshot()
+    expect(state.taskOpen).toBe(false)
+    expect(state.selectedTask).toBeUndefined()
+    expect(state.taskCollapsed).toBe(false)
+    expect(state.taskTree).toEqual({})
+    expect(state.taskTreeExpanded).toEqual([])
+  })
+
+  it('collapses and expands and resizes the task popup', () => {
+    const instance = createWorkbenchStore().create()
+    instance.actions.taskOpened('t1')
+    instance.actions.taskCollapse()
+    expect(instance.getSnapshot().taskCollapsed).toBe(true)
+    instance.actions.taskExpand()
+    expect(instance.getSnapshot().taskCollapsed).toBe(false)
+    instance.actions.setTaskHeight(480)
+    expect(instance.getSnapshot().taskHeight).toBe(480)
+  })
+
+  it('marks a directory listing in flight and records its children', () => {
+    const instance = createWorkbenchStore().create()
+    instance.actions.taskDirLoading('d')
+    expect(instance.getSnapshot().taskTreeListing).toEqual({ d: true })
+    instance.actions.taskDirReady('d', [{ path: 'd/a.md', name: 'a.md', kind: 'file' }])
+    expect(instance.getSnapshot()).toMatchObject({
+      taskTree: { d: [{ path: 'd/a.md', name: 'a.md', kind: 'file' }] },
+      taskTreeListing: { d: false },
+    })
+  })
+
+  it('toggles a directory expansion in the task tree', () => {
+    const instance = createWorkbenchStore().create()
+    instance.actions.taskDirToggle('d')
+    expect(instance.getSnapshot().taskTreeExpanded).toEqual(['d'])
+    instance.actions.taskDirToggle('d')
+    expect(instance.getSnapshot().taskTreeExpanded).toEqual([])
+    instance.actions.taskDirToggle('d')
+    instance.actions.taskDirToggle('e')
+    expect(instance.getSnapshot().taskTreeExpanded).toEqual(['d', 'e'])
+  })
+
+  it('walks the task file read phase from loading to ready or failed', () => {
+    const instance = createWorkbenchStore().create()
+    instance.actions.taskFileLoading('a.md')
+    expect(instance.getSnapshot().taskFile).toEqual({ kind: 'loading', path: 'a.md' })
+    instance.actions.taskFileReady('a.md', '# text')
+    expect(instance.getSnapshot().taskFile).toEqual({ kind: 'ready', path: 'a.md', text: '# text' })
+    instance.actions.taskFileLoading('b.md')
+    instance.actions.taskFileFailed('b.md', { kind: 'unexpected', message: 'no' })
+    expect(instance.getSnapshot().taskFile).toEqual({
+      kind: 'failed', path: 'b.md', error: { kind: 'unexpected', message: 'no' },
+    })
+  })
+
+  it('switches the preview tab to tasks and back', () => {
+    const instance = createWorkbenchStore().create()
+    instance.actions.setView('tasks')
+    expect(instance.getSnapshot().view).toBe('tasks')
+    instance.actions.setView('dag')
+    expect(instance.getSnapshot().view).toBe('dag')
   })
 })

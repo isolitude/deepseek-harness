@@ -9,6 +9,7 @@
  */
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-api-session-controller/client'
+import type {} from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type {} from '@deepseek-ai/dsh-api-workspace-files/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
@@ -46,8 +47,8 @@ export type { WorkbenchActionProps } from './FooterButton.tsx'
 export type { WorkbenchStore } from './store.ts'
 export type { LlmpwaKey } from './locales.ts'
 
-/** Required browser services: slots, locale, sessions, and the Remote carrier's `workspaceFiles` namespace. */
-export const inject = ['slots', 'locale', 'sessions', 'remote', 'remote.workspaceFiles']
+/** Required browser services: slots, locale, sessions, workspaces, and the Remote carrier's `workspaceFiles` namespace. */
+export const inject = ['slots', 'locale', 'sessions', 'workspaces', 'uiWorkspace', 'remote', 'remote.workspaceFiles']
 
 /**
  * Client plugin body: register the dictionaries and both workbench surfaces.
@@ -57,7 +58,7 @@ export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-llmpwa-pipeline: dictionaries')
 
   const store = createWorkbenchStore()
-  const face = workbenchFace(ctx.remote, ctx.sessions)
+  const face = workbenchFace(ctx.remote, ctx.sessions, ctx.workspaces, ctx.uiWorkspace)
 
   ctx.effect(() => ctx.slots.inject('sidebar.footer.action', () => ctx.slots.register({
     name: 'sidebar.footer.action',
