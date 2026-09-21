@@ -2277,6 +2277,9 @@ importers:
       '@deepseek-ai/dsh-office-to-pdf':
         specifier: workspace:^
         version: link:../../document/office-to-pdf
+      '@deepseek-ai/dsh-remote-ssh2':
+        specifier: workspace:^
+        version: link:../../remote/remote-ssh2
       '@deepseek-ai/dsh-session-log-export':
         specifier: workspace:^
         version: link:../../session-query/session-log-export
@@ -2292,6 +2295,9 @@ importers:
       '@deepseek-ai/dsh-subprocess':
         specifier: workspace:^
         version: link:../../subprocess/subprocess
+      '@deepseek-ai/dsh-tool-remote':
+        specifier: workspace:^
+        version: link:../../remote/tool-remote
       '@deepseek-ai/dsh-tool-subagent':
         specifier: workspace:^
         version: link:../../subagent/tool-subagent
@@ -3426,6 +3432,9 @@ importers:
       '@deepseek-ai/dsh-api-session-controller':
         specifier: workspace:^
         version: link:../../api/session-controller
+      '@deepseek-ai/dsh-api-workspace-controller':
+        specifier: workspace:^
+        version: link:../../api/workspace-controller
       '@deepseek-ai/dsh-api-workspace-files':
         specifier: workspace:^
         version: link:../../api/workspace-files

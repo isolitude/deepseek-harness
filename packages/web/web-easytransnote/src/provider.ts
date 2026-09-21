@@ -184,7 +184,10 @@ export class EasyTransnoteSearchProvider implements WebSearchProvider {
   }
 }
 
-/** Map an easytransnote search response to the seam's normalized result. */
+/** Map an easytransnote search response to the seam's normalized result.
+ * @param payload - the raw easytransnote search response.
+ * @returns the seam's normalized {@link WebSearchResult}.
+ */
 export function mapSearchResponse(payload: EasyTransnoteSearchResponse): WebSearchResult {
   const urls = payload.urls ?? []
   const sources: WebSearchSource[] = []
@@ -231,7 +234,11 @@ export class EasyTransnoteFetchProvider implements WebFetchProvider {
   }
 }
 
-/** Map an easytransnote fetch response to the seam's normalized fetch result. */
+/** Map an easytransnote fetch response to the seam's normalized fetch result.
+ * @param payload - the raw easytransnote fetch response.
+ * @param requestedUrl - the originally requested URL, used in the error message and result.
+ * @returns the seam's normalized {@link WebFetchResult}.
+ */
 export function mapFetchResponse(payload: EasyTransnoteFetchResponse, requestedUrl: string): WebFetchResult {
   // Prefer the API's markdown rendering as text; fall back to its HTML so a
   // fetch still yields something when markdown is absent. The seam's closed
