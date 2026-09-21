@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-09-14-llmpwa-reference-rendering.md
+2026-09-14-llmpwa-reference-rendering.md: 547f2c783d5beecf1aa1da5c9b0b4ce26c6491e5
+2026-09-14-llmpwa-reference-rendering.zh.md: a3fc2a1e5b62cec500cf47dc650b18729e7c7169
