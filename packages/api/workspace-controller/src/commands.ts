@@ -13,6 +13,7 @@ import { workspaceView } from './feed.ts'
 import type {
   WorkspaceArchiveSessionRequest,
   WorkspaceArchiveValue,
+  WorkspaceAttachSessionRequest,
   WorkspaceCreateRequest,
   WorkspaceCreateValue,
   WorkspaceDeleteRequest,
@@ -117,6 +118,26 @@ export class WorkspaceCommands {
       if (!(error instanceof WorkspaceOrderInvalidError)) throw error
       throw workspaceNotFound(error.workspaceId)
     }
+  }
+
+  /**
+   * Account one known Session to a Workspace without moving files or logs.
+   * @param request - Workspace and Session identities to join.
+   * @returns the updated Workspace projection.
+   */
+  async attachSession(request: WorkspaceAttachSessionRequest): Promise<WorkspaceValue> {
+    const workspace = this.requireWorkspace(request.workspaceId)
+    try {
+      await workspace.attachSession(request.sessionId)
+    } catch (error) {
+      throw new RemoteError(
+        'workspace/attach-failed',
+        error instanceof Error ? error.message : String(error),
+        { workspaceId: request.workspaceId, sessionId: request.sessionId },
+        { cause: error },
+      )
+    }
+    return { workspace: workspaceView(workspace) }
   }
 
   /**

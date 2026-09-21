@@ -68,6 +68,13 @@ export interface IWorkspaces {
    */
   unarchiveSession(sessionId: SessionId): Promise<void>
   /**
+   * Account one known Session to a Workspace.
+   * @param workspaceId - owning Workspace.
+   * @param sessionId - Session to join.
+   * @returns the changed Workspace.
+   */
+  attachSession(workspaceId: WorkspaceId, sessionId: SessionId): Promise<WorkspaceView>
+  /**
    * Move a Session within one Workspace account.
    * @param workspaceId - owning Workspace.
    * @param sessionId - Session to move.
@@ -124,6 +131,12 @@ export class WorkspaceController extends Service implements IWorkspaces {
   async unarchiveSession(sessionId: SessionId): Promise<void> {
     const result = await this.model.unarchiveSession(sessionId)
     if (!result.ok) throw commandError('session unarchive', result.error)
+  }
+
+  async attachSession(workspaceId: WorkspaceId, sessionId: SessionId): Promise<WorkspaceView> {
+    const result = await this.model.attachSession(workspaceId, sessionId)
+    if (!result.ok) throw commandError('session attach', result.error)
+    return result.value.workspace
   }
 
   async insertSessionBefore(

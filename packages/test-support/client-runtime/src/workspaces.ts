@@ -159,4 +159,19 @@ export class TestWorkspaces implements IWorkspaces {
       draft.archivedSessionIds = draft.archivedSessionIds.filter(id => id !== sessionId)
     })
   }
+
+  /**
+   * Account a session to a Workspace (recorded). The default mirrors the
+   * production face's observable effect: the id joins the workspace's account.
+   * @param workspaceId - owning workspace.
+   * @param sessionId - session to join.
+   * @returns the updated view.
+   */
+  async attachSession(workspaceId: WorkspaceId, sessionId: SessionId): Promise<WorkspaceView> {
+    this.calls.push({ method: 'attachSession', args: [workspaceId, sessionId] })
+    const stub = this.stubs.get('attachSession')
+    if (stub !== undefined) return await (stub(workspaceId, sessionId) as Promise<WorkspaceView>)
+    const account = this.list.getSnapshot().items.find(item => item.workspaceId === workspaceId)
+    return { workspaceId, title: account?.title ?? '', path: account?.path ?? '', sessionIds: [sessionId] } as unknown as WorkspaceView
+  }
 }

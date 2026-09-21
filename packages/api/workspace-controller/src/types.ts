@@ -32,6 +32,11 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     'workspace/invalid-path': { readonly path: string }
     /** Another Workspace already uses the requested name. */
     'workspace/name-conflict': { readonly name: string }
+    /** The Session's cwd cannot be validated against the Workspace path. */
+    'workspace/attach-failed': {
+      readonly workspaceId: WorkspaceId
+      readonly sessionId: SessionId
+    }
     /** The Session or its anchor is not in the Workspace's manual order. */
     'workspace/move-invalid': {
       readonly workspaceId: WorkspaceId
@@ -69,6 +74,12 @@ export interface WorkspaceRenameRequest {
 /** Workspace mutation returning the complete changed row. */
 export interface WorkspaceValue {
   readonly workspace: WorkspaceView
+}
+
+/** One Session to account to a Workspace. */
+export interface WorkspaceAttachSessionRequest {
+  readonly workspaceId: WorkspaceId
+  readonly sessionId: SessionId
 }
 
 /** Workspace registration deletion. */

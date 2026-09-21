@@ -232,6 +232,34 @@ describe('WorkspaceController commands', () => {
     await expect(controller.unarchiveSession({ sessionId: session.id }))
       .resolves.toEqual({ archivedSessionIds: [] })
   })
+
+  it('accounts a Session to a Workspace and rejects a cwd mismatch', async () => {
+    const { controller, ctx, root } = await harness()
+    const created = await controller.create({ path: stageDir(root, 'attach') })
+    const workspace = ctx.workspaceRegistry.get(created.workspace.workspaceId)
+    if (workspace === undefined) throw new Error('fixture Workspace disappeared')
+
+    const matching = ctx.sessions.create(SessionId('attach-matching'), {
+      meta: { cwd: workspace.path },
+    })
+    await expect(controller.attachSession({
+      workspaceId: created.workspace.workspaceId,
+      sessionId: matching.id,
+    })).resolves.toMatchObject({ workspace: { sessionIds: [matching.id] } })
+
+    const stray = ctx.sessions.create(SessionId('attach-stray'), {
+      meta: { cwd: stageDir(root, 'elsewhere') },
+    })
+    await expect(controller.attachSession({
+      workspaceId: created.workspace.workspaceId,
+      sessionId: stray.id,
+    })).rejects.toMatchObject({ code: 'workspace/attach-failed' })
+
+    await expect(controller.attachSession({
+      workspaceId: 'missing' as WorkspaceId,
+      sessionId: matching.id,
+    })).rejects.toMatchObject({ code: 'workspace/not-found' })
+  })
 })
 
 describe('WorkspaceController follow', () => {
