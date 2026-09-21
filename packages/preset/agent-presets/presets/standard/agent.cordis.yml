@@ -261,6 +261,14 @@
 - id: present
   name: '@deepseek-ai/dsh-tool-present'
 
+# ── remote execution over SSH ───────────────────────────────────────────────
+
+# Model-facing remote_* tools. The `remote` seam provider (dsh-remote-ssh2) is a
+# host-plane row; this preset row only injects it. Each call resolves the
+# calling session's per-analysis `.dsh/config.yml`.
+- id: tool-remote
+  name: '@deepseek-ai/dsh-tool-remote'
+
 - id: tool-plugin-manager
   name: '@deepseek-ai/dsh-plugin-manager/tools'
   disabled: true

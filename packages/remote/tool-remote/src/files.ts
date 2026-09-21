@@ -27,7 +27,10 @@ function renderRead(path: string, totalLines: number, truncated: boolean, lines:
   return `<${path}>\n${body.join('\n')}\n${footer}`
 }
 
-/** Register `remote_read`. */
+/** Register `remote_read`.
+ * @param ctx - the tool execution context used to register the tool.
+ * @param options - the executor options (connection loader and default line limit).
+ */
 export function applyReadTool(ctx: Context, options: ReadOptions): void {
   ctx.tools.register(defineTool({
     name: 'remote_read',
@@ -97,7 +100,10 @@ interface WriteOptions {
   connectionLoader: ConnectionLoader
 }
 
-/** Register `remote_write`. */
+/** Register `remote_write`.
+ * @param ctx - the tool execution context used to register the tool.
+ * @param options - the executor options (connection loader).
+ */
 export function applyWriteTool(ctx: Context, options: WriteOptions): void {
   ctx.tools.register(defineTool({
     name: 'remote_write',
@@ -139,7 +145,10 @@ interface EditOptions {
   connectionLoader: ConnectionLoader
 }
 
-/** Register `remote_edit`. */
+/** Register `remote_edit`.
+ * @param ctx - the tool execution context used to register the tool.
+ * @param options - the executor options (connection loader).
+ */
 export function applyEditTool(ctx: Context, options: EditOptions): void {
   ctx.tools.register(defineTool({
     name: 'remote_edit',

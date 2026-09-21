@@ -109,6 +109,12 @@
     - id: workspace-files
       name: '@deepseek-ai/dsh-api-workspace-files'
 
+    # SSH remote-execution seam provider (registers ctx.remote). Host-plane
+    # because dsh-tool-remote, a standard-preset row, injects it; the remote host
+    # itself is per-analysis via each session's .dsh/config.yml.
+    - id: remote-ssh2
+      name: '@deepseek-ai/dsh-remote-ssh2'
+
     # Configuration-surface reads and writes over Typert Remote. Each method
     # reports an actionable error when its settings-domain provider is absent.
     - id: settings-controller

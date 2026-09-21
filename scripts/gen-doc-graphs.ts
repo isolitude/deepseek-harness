@@ -542,6 +542,15 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'Folds revisioned objective state from the session log and keeps live continuation activation process-local.',
   },
   {
+    key: 'remote',
+    pkg: 'remote',
+    title: 'Remote-execution seam',
+    mode: 'seam',
+    implementations: ['remote-ssh2'],
+    consumers: ['tool-remote'],
+    note: 'Runs shell commands and bounded file operations on a per-call resolved remote connection; the tool layer builds the fully-explicit connection and consumes the service, while the SSH2 backend mounts ctx.remote for SSH targets and carries ProxyJump hops.',
+  },
+  {
     key: 'ssh',
     pkg: 'ssh',
     title: 'POSIX SSH connection owner',

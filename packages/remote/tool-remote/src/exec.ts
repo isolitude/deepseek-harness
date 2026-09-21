@@ -33,7 +33,10 @@ function renderRunExit(result: RemoteRunResult): string {
   return lines.join('\n')
 }
 
-/** Register `remote_exec`. */
+/** Register `remote_exec`.
+ * @param ctx - the tool execution context used to register the tool.
+ * @param options - the executor options (connection loader, default timeout, default workdir).
+ */
 export function applyExecTool(ctx: Context, options: ExecOptions): void {
   ctx.tools.register(defineTool({
     name: 'remote_exec',

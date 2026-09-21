@@ -75,4 +75,73 @@ A non-zero exit is a result, not a failure. Mutations and transfers publish atom
 Failures are typed `RemoteError`s with stable codes: `REMOTE_CONNECT_FAILED`, `REMOTE_AUTH_FAILED`, `REMOTE_HOST_KEY_MISMATCH`, `REMOTE_TIMEOUT`, `REMOTE_ABORTED`, `REMOTE_NOT_FOUND`, `REMOTE_PERMISSION_DENIED`, `REMOTE_IO_ERROR`, `REMOTE_TOO_LARGE`, `REMOTE_NOT_TEXT`, `REMOTE_AMBIGUOUS_EDIT`, `REMOTE_ALREADY_EXISTS`, `LOCAL_NOT_FOUND`, `LOCAL_PERMISSION_DENIED`, `LOCAL_ALREADY_EXISTS`.
 
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
+
+<a id="cordis-surface"></a>
+
+## Cordis API
+
+Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — the language sides differ only in locale-specific paired document paths. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
+
+<a id="ctxremote--remoteexecutor-abstract-seam"></a>
+
+### `ctx.remote` — `RemoteExecutor` (abstract seam)
+
+Abstract remote executor. One provider registers `ctx.remote` per composition; every operation takes the fully-explicit RemoteConnection produced by the consuming tool layer, so provider defaults never sneak into a call. Caller cancellation rides each request's `signal` (the tool passes `exec.signal`).
+
+```ts cordis-catalog
+/**
+ * Run one remote shell command. A non-zero exit is a result, not a failure;
+ * the method rejects only for infrastructure failures (connection, host key,
+ * auth) or a transfer-limit violation. The returned output is bounded by the
+ * provider's per-stream caps.
+ * @param connection - resolved connection for this call.
+ * @param request - explicit command, cwd, deadline, and environment.
+ * @returns exit facts and bounded stdout/stderr.
+ */
+abstract run(connection: RemoteConnection, request: RemoteRunRequest): Promise<RemoteRunResult>
+
+/**
+ * Read a bounded line-numbered window of a remote UTF-8 text file.
+ * @param connection - resolved connection for this call.
+ * @param request - remote path, 1-based offset, and line limit.
+ * @returns the window plus total lines and truncation truth.
+ */
+abstract readText(connection: RemoteConnection, request: RemoteReadRequest): Promise<RemoteReadResult>
+
+/**
+ * Atomically create or replace a remote UTF-8 text file.
+ * @param connection - resolved connection for this call.
+ * @param request - remote path and complete new content.
+ * @returns the written path and whether it was created.
+ */
+abstract writeText(connection: RemoteConnection, request: RemoteWriteRequest): Promise<RemoteWriteResult>
+
+/**
+ * Apply one literal text replacement atomically on a remote file.
+ * @param connection - resolved connection for this call.
+ * @param request - remote path, old/new literal, and optional replace-all.
+ * @returns the edited path and the number of replacements.
+ */
+abstract editText(connection: RemoteConnection, request: RemoteEditRequest): Promise<RemoteEditResult>
+
+/**
+ * Stream one local file to a remote destination (SFTP), failing when the
+ * destination exists unless `overwrite` is set.
+ * @param connection - resolved connection for this call.
+ * @param request - local source, remote destination, and overwrite flag.
+ * @returns both paths and the transferred byte count.
+ */
+abstract push(connection: RemoteConnection, request: RemotePushRequest): Promise<RemoteTransferResult>
+
+/**
+ * Stream one remote file to a local destination, failing when the destination
+ * exists unless `overwrite` is set.
+ * @param connection - resolved connection for this call.
+ * @param request - remote source, local destination, and overwrite flag.
+ * @returns both paths and the transferred byte count.
+ */
+abstract pull(connection: RemoteConnection, request: RemotePullRequest): Promise<RemoteTransferResult>
+```
+
+Source: [`packages/remote/remote/src/index.ts`](../../packages/remote/remote/src/index.ts)
 <!-- END GENERATED cordis-surface -->

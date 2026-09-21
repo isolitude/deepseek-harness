@@ -40,7 +40,10 @@ export interface RemoteConfigFile {
   missing?: boolean
 }
 
-/** Walk up from a directory looking for a `<dir>/.dsh/config.yml`. */
+/** Walk up from a directory looking for a `<dir>/.dsh/config.yml`.
+ * @param startDir - directory to begin walking from (absolute, or relative to cwd).
+ * @returns the found `.dsh/config.yml` path, or `undefined` when none is found within the walk depth.
+ */
 export async function findAnalysisDotDsh(startDir: string): Promise<string | undefined> {
   let current = isAbsolute(startDir) ? startDir : join(process.cwd(), startDir)
   for (let depth = 0; depth < 16; depth += 1) {

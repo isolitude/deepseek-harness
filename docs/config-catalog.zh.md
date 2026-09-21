@@ -2007,6 +2007,33 @@ Depends on: [`LocalConfig`](#deepseek-aidsh-pwsh-local)
 
 来源：[`packages/shell/pwsh-sandbox/src/index.ts:40`](../packages/shell/pwsh-sandbox/src/index.ts)
 
+<a id="deepseek-aidsh-remote-ssh2"></a>
+
+## `@deepseek-ai/dsh-remote-ssh2`
+
+```ts config-catalog
+/**
+ * Provider config: shared connection and payload limits. Values that vary per
+ * analysis live on the tool-built {@link RemoteConnection}, never here.
+ */
+export interface Config {
+  /** Close a pooled connection after this idle time. Default 60s. */
+  idleTimeoutMs?: number
+  /** Connection-establishment deadline. Default 15s. */
+  connectTimeoutMs?: number
+  /** How often to send SSH keepalive packets. Default 60s; 0 disables. */
+  keepaliveIntervalMs?: number
+  /** Consecutive unanswered keepalives before the connection is dropped. Default 3. */
+  keepaliveCountMax?: number
+  /** Per-stream cap for one command's collected output. Default 256 KiB. */
+  maxOutputBytes?: number
+  /** Cap for one text read/write/edit payload. Default 16 MiB. */
+  maxReadBytes?: number
+}
+```
+
+来源：[`packages/remote/remote-ssh2/src/index.ts:46`](../packages/remote/remote-ssh2/src/index.ts)
+
 <a id="deepseek-aidsh-repeat-tool-reminder"></a>
 
 ## `@deepseek-ai/dsh-repeat-tool-reminder`
@@ -2575,33 +2602,6 @@ export interface Config {
 ```
 
 来源：[`packages/ssh/ssh/src/index.ts:17`](../packages/ssh/ssh/src/index.ts)
-
-<a id="deepseek-aidsh-remote-ssh2"></a>
-
-## `@deepseek-ai/dsh-remote-ssh2`
-
-```ts config-catalog
-/**
- * Provider config: shared connection and payload limits. Values that vary per
- * analysis live on the tool-built {@link RemoteConnection}, never here.
- */
-export interface Config {
-  /** Close a pooled connection after this idle time. Default 60s. */
-  idleTimeoutMs?: number
-  /** Connection-establishment deadline. Default 15s. */
-  connectTimeoutMs?: number
-  /** How often to send SSH keepalive packets. Default 60s; 0 disables. */
-  keepaliveIntervalMs?: number
-  /** Consecutive unanswered keepalives before the connection is dropped. Default 3. */
-  keepaliveCountMax?: number
-  /** Per-stream cap for one command's collected output. Default 256 KiB. */
-  maxOutputBytes?: number
-  /** Cap for one text read/write/edit payload. Default 16 MiB. */
-  maxReadBytes?: number
-}
-```
-
-来源：[`packages/remote/remote-ssh2/src/index.ts:46`](../packages/remote/remote-ssh2/src/index.ts)
 
 <a id="deepseek-aidsh-storage-domain"></a>
 
@@ -3282,6 +3282,28 @@ export interface Config {
 
 来源：[`packages/workflow/tool-ralph/src/index.ts:21`](../packages/workflow/tool-ralph/src/index.ts)
 
+<a id="deepseek-aidsh-tool-remote"></a>
+
+## `@deepseek-ai/dsh-tool-remote`
+
+需要：`tools` · `remote` · `systemPrompt`
+
+```ts config-catalog
+/** Plugin config (all optional — `Config` supplies the defaults). */
+export interface Config {
+  /** Default command deadline in milliseconds. Default 60s. */
+  timeoutMs?: number
+  /** Maximum lines returned by one `remote_read` call. Default 2000. */
+  readLimit?: number
+  /** Default transfer cap in bytes. Default 256 MiB. */
+  maxTransferBytes?: number
+  /** Default remote working directory for `remote_exec`. Default = config.remoteRoot. */
+  workdir?: string
+}
+```
+
+来源：[`packages/remote/tool-remote/src/index.ts:26`](../packages/remote/tool-remote/src/index.ts)
+
 <a id="deepseek-aidsh-tool-session-query"></a>
 
 ## `@deepseek-ai/dsh-tool-session-query`
@@ -3315,28 +3337,6 @@ export interface Config {
 ```
 
 来源：[`packages/skill/tool-skill/src/index.ts:61`](../packages/skill/tool-skill/src/index.ts)
-
-<a id="deepseek-aidsh-tool-remote"></a>
-
-## `@deepseek-ai/dsh-tool-remote`
-
-需要：`tools` · `remote` · `systemPrompt`
-
-```ts config-catalog
-/** Plugin config (all optional — `Config` supplies the defaults). */
-export interface Config {
-  /** Default command deadline in milliseconds. Default 60s. */
-  timeoutMs?: number
-  /** Maximum lines returned by one `remote_read` call. Default 2000. */
-  readLimit?: number
-  /** Default transfer cap in bytes. Default 256 MiB. */
-  maxTransferBytes?: number
-  /** Default remote working directory for `remote_exec`. Default = config.remoteRoot. */
-  workdir?: string
-}
-```
-
-来源：[`packages/remote/tool-remote/src/index.ts:26`](../packages/remote/tool-remote/src/index.ts)
 
 <a id="deepseek-aidsh-tool-str-replace-editor"></a>
 
@@ -3961,9 +3961,6 @@ export interface Config {
 - `@deepseek-ai/dsh-subprocess` — 抽象 `SubprocessRuntime`（[`packages/subprocess/subprocess/src/index.ts`](../packages/subprocess/subprocess/src/index.ts)）
 - `@deepseek-ai/dsh-workflow` — 抽象 `WorkflowEngine`（[`packages/workflow/workflow/src/index.ts`](../packages/workflow/workflow/src/index.ts)）
 ## 库包（无插件入口）
-
-由其他包作为库导入；`cordis.yml` 无法加载它们。
-
 - `@deepseek-ai/dsh-agent-loop-testkit`（[`packages/test-support/agent-loop-testkit/src/index.ts`](../packages/test-support/agent-loop-testkit/src/index.ts)）
 - `@deepseek-ai/dsh-anonymous-user-id`（[`packages/identity/anonymous-user-id/src/index.ts`](../packages/identity/anonymous-user-id/src/index.ts)）
 - `@deepseek-ai/dsh-app-boot`（[`packages/boot/app-boot/src/index.ts`](../packages/boot/app-boot/src/index.ts)）
@@ -3994,6 +3991,7 @@ export interface Config {
 - `@deepseek-ai/dsh-native-command`（[`packages/util/native-command/src/index.ts`](../packages/util/native-command/src/index.ts)）
 - `@deepseek-ai/dsh-output-retention`（[`packages/util/output-retention/src/index.ts`](../packages/util/output-retention/src/index.ts)）
 - `@deepseek-ai/dsh-package-manifest` ([`packages/util/package-manifest/src/index.ts`](../packages/util/package-manifest/src/index.ts))
+- `@deepseek-ai/dsh-remote`（[`packages/remote/remote/src/index.ts`](../packages/remote/remote/src/index.ts)）
 - `@deepseek-ai/dsh-remote-mock`（[`packages/test-support/remote-mock/src/index.ts`](../packages/test-support/remote-mock/src/index.ts)）
 - `@deepseek-ai/dsh-sandbox-windows-acl`（[`packages/sandbox/sandbox-windows-acl/src/index.ts`](../packages/sandbox/sandbox-windows-acl/src/index.ts)）
 - `@deepseek-ai/dsh-scope`（[`packages/core/scope/src/index.ts`](../packages/core/scope/src/index.ts)）
@@ -4008,7 +4006,6 @@ export interface Config {
 - `@deepseek-ai/dsh-session-snapshot`（[`packages/test-support/session-snapshot/src/index.ts`](../packages/test-support/session-snapshot/src/index.ts)）
 - `@deepseek-ai/dsh-session-telemetry`（[`packages/session/session-telemetry/src/index.ts`](../packages/session/session-telemetry/src/index.ts)）
 - `@deepseek-ai/dsh-session-title-llm`（[`packages/session/session-title-llm/src/index.ts`](../packages/session/session-title-llm/src/index.ts)）
-- `@deepseek-ai/dsh-remote`（[`packages/remote/remote/src/index.ts`](../packages/remote/remote/src/index.ts)）
 - `@deepseek-ai/dsh-subagent-in-process-driver`（[`packages/subagent/subagent-in-process-driver/src/index.ts`](../packages/subagent/subagent-in-process-driver/src/index.ts)）
 - `@deepseek-ai/dsh-timeout`（[`packages/util/timeout/src/index.ts`](../packages/util/timeout/src/index.ts)）
 - `@deepseek-ai/dsh-typert-generator`（[`packages/typert/generator/src/index.ts`](../packages/typert/generator/src/index.ts)）

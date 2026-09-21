@@ -16,7 +16,13 @@ export type ConnectionLoader = (
   session: Session,
 ) => Promise<RemoteConnection | undefined>
 
-/** Load the connection for one execution, or raise the loud missing-config error. */
+/** Load the connection for one execution, or raise the loud missing-config error.
+ * @param ctx - the tool execution context.
+ * @param session - the invoking session, whose analysis resolves the connection.
+ * @param loader - resolves the connection for the call, or `undefined` when no remote config applies.
+ * @returns the resolved connection.
+ * @throws {@link RemoteError} with `REMOTE_CONNECT_FAILED` when the loader returns no connection.
+ */
 export async function requireConnection(
   ctx: Context,
   session: Session,

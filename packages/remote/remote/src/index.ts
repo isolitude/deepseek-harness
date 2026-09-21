@@ -53,7 +53,12 @@ declare module '@deepseek-ai/cordis' {
   }
 }
 
-/** Resolve a remote path against a connection's root, rejecting parent escape. */
+/** Resolve a remote path against a connection's root, rejecting parent escape.
+ * @param connection - the resolved connection carrying the remote root.
+ * @param path - the candidate remote path (absolute, or root-relative).
+ * @returns the normalized path confirmed under the root.
+ * @throws {@link RemoteError} with `REMOTE_PERMISSION_DENIED` when the path escapes the root.
+ */
 export function resolveRemotePath(connection: RemoteConnection, path: string): string {
   const joined = path.startsWith('/') ? path : `${connection.remoteRoot}/${path}`
   const normalized = posix.normalize(joined)

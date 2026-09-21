@@ -30,7 +30,7 @@
       "path": "../../credentials/credentials"
     },
     {
-      "path": "../ssh"
+      "path": "../remote"
     }
   ]
 }

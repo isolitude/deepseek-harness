@@ -82,7 +82,10 @@ interface PooledClient {
   closed: boolean
 }
 
-/** Human-readable message from an unknown thrown value. */
+/** Human-readable message from an unknown thrown value.
+ * @param cause - the thrown value.
+ * @returns the Error message, or the value stringified when it is not an Error.
+ */
 export function messageOf(cause: unknown): string {
   return cause instanceof Error ? cause.message : String(cause)
 }

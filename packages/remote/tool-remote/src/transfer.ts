@@ -28,7 +28,10 @@ function resolveLocalPath(cwd: string, path: string): string {
   return join(cwd, path)
 }
 
-/** Register `remote_push`. */
+/** Register `remote_push`.
+ * @param ctx - the tool execution context used to register the tool.
+ * @param options - the executor options (connection loader and default transfer cap).
+ */
 export function applyPushTool(ctx: Context, options: TransferOptions): void {
   ctx.tools.register(defineTool({
     name: 'remote_push',
@@ -84,7 +87,10 @@ export function applyPushTool(ctx: Context, options: TransferOptions): void {
   }))
 }
 
-/** Register `remote_pull`. */
+/** Register `remote_pull`.
+ * @param ctx - the tool execution context used to register the tool.
+ * @param options - the executor options (connection loader and default transfer cap).
+ */
 export function applyPullTool(ctx: Context, options: TransferOptions): void {
   ctx.tools.register(defineTool({
     name: 'remote_pull',

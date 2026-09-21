@@ -125,7 +125,9 @@
     "open": "^11.0.0",
     "@deepseek-ai/dsh-api-terminal-controller": "workspace:^",
     "@deepseek-ai/dsh-client-ui-sidebar-terminal": "workspace:^",
-    "@deepseek-ai/dsh-office-to-pdf": "workspace:^"
+    "@deepseek-ai/dsh-office-to-pdf": "workspace:^",
+    "@deepseek-ai/dsh-remote-ssh2": "workspace:^",
+    "@deepseek-ai/dsh-tool-remote": "workspace:^"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:^",

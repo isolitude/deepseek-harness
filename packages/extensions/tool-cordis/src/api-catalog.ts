@@ -1618,6 +1618,49 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'remote',
+    summary: 'Abstract remote executor.',
+    description: 'Abstract remote executor. One provider registers `ctx.remote` per composition; every operation takes the fully-explicit RemoteConnection produced by the consuming tool layer, so provider defaults never sneak into a call. Caller cancellation rides each request\'s `signal` (the tool passes `exec.signal`).',
+    methods: [
+      {
+        signature: 'abstract run(connection: RemoteConnection, request: RemoteRunRequest): Promise<RemoteRunResult>',
+        description: 'Run one remote shell command. A non-zero exit is a result, not a failure; the method rejects only for infrastructure failures (connection, host key, auth) or a transfer-limit violation. The returned output is bounded by the provider\'s per-stream caps.',
+        parameters: [{ name: 'connection', description: 'resolved connection for this call.' }, { name: 'request', description: 'explicit command, cwd, deadline, and environment.' }],
+        returns: 'exit facts and bounded stdout/stderr.',
+      },
+      {
+        signature: 'abstract readText(connection: RemoteConnection, request: RemoteReadRequest): Promise<RemoteReadResult>',
+        description: 'Read a bounded line-numbered window of a remote UTF-8 text file.',
+        parameters: [{ name: 'connection', description: 'resolved connection for this call.' }, { name: 'request', description: 'remote path, 1-based offset, and line limit.' }],
+        returns: 'the window plus total lines and truncation truth.',
+      },
+      {
+        signature: 'abstract writeText(connection: RemoteConnection, request: RemoteWriteRequest): Promise<RemoteWriteResult>',
+        description: 'Atomically create or replace a remote UTF-8 text file.',
+        parameters: [{ name: 'connection', description: 'resolved connection for this call.' }, { name: 'request', description: 'remote path and complete new content.' }],
+        returns: 'the written path and whether it was created.',
+      },
+      {
+        signature: 'abstract editText(connection: RemoteConnection, request: RemoteEditRequest): Promise<RemoteEditResult>',
+        description: 'Apply one literal text replacement atomically on a remote file.',
+        parameters: [{ name: 'connection', description: 'resolved connection for this call.' }, { name: 'request', description: 'remote path, old/new literal, and optional replace-all.' }],
+        returns: 'the edited path and the number of replacements.',
+      },
+      {
+        signature: 'abstract push(connection: RemoteConnection, request: RemotePushRequest): Promise<RemoteTransferResult>',
+        description: 'Stream one local file to a remote destination (SFTP), failing when the destination exists unless `overwrite` is set.',
+        parameters: [{ name: 'connection', description: 'resolved connection for this call.' }, { name: 'request', description: 'local source, remote destination, and overwrite flag.' }],
+        returns: 'both paths and the transferred byte count.',
+      },
+      {
+        signature: 'abstract pull(connection: RemoteConnection, request: RemotePullRequest): Promise<RemoteTransferResult>',
+        description: 'Stream one remote file to a local destination, failing when the destination exists unless `overwrite` is set.',
+        parameters: [{ name: 'connection', description: 'resolved connection for this call.' }, { name: 'request', description: 'remote source, local destination, and overwrite flag.' }],
+        returns: 'both paths and the transferred byte count.',
+      },
+    ],
+  },
+  {
     key: 'sandbox',
     summary: 'Abstract process-sandbox service.',
     description: 'Abstract process-sandbox service. confine must return enforcing argv or fail closed at wrap or runner-execution time; silent unconfined passthrough is forbidden. Functional probes arbitrate multi-runner chains and may be skipped for a sole candidate, whose own refusal remains the fail-closed end.',
@@ -3251,6 +3294,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the complete resulting Workspace order.',
       },
       {
+        signature: '@Remote(\'attachSession\') attachSession(request: WorkspaceAttachSessionRequest): Promise<WorkspaceValue>',
+        description: 'Move one accounted Session within a Workspace.',
+        parameters: [{ name: 'request', description: 'Workspace, Session, and optional anchor identities.' }],
+        returns: 'the updated Workspace projection.',
+      },
+      {
         signature: '@Remote(\'insertSessionBefore\') insertSessionBefore(request: WorkspaceInsertSessionBeforeRequest): Promise<WorkspaceValue>',
         description: 'Move one accounted Session within a Workspace.',
         parameters: [{ name: 'request', description: 'Workspace, Session, and optional anchor identities.' }],
@@ -3322,6 +3371,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Stream every `fs/observed` observation of a file inside the Session\'s workspace. Only instrumented filesystem operations report here; the OS is not watched.',
         parameters: [{ name: 'workspaceFileScope', description: 'header-derived workspace root for the Session identity on the wire.' }, { name: 'signal', description: 'generation cancellation.' }],
         returns: '`ready` once the Host observation queue is active and the workspace root is resolved, then queued and live observations in emission order.',
+      },
+      {
+        signature: '@Remote async write(agent: Agent, request: WorkspaceFileWriteRequest, signal: AbortSignal): Promise<WorkspaceFileWrite>',
+        description: 'Atomically create or replace a whole UTF-8 text file inside the Agent\'s workspace, creating any missing parent directories. The write is fenced by the session\'s sandbox policy (the same confinement the model-facing `write` tool gets) and confined to the workspace root; a `read-only` session is refused with `workspace-file/write-denied`. Used by the workbench to persist per-analysis settings beside the analysis.',
+        parameters: [{ name: 'agent', description: 'target Agent resolved from the Session identity on the wire.' }, { name: 'request', description: 'the workspace path and full new content.' }, { name: 'signal', description: 'caller cancellation.' }],
+        returns: 'the written file\'s identity, version, and create/update operation.',
       },
     ],
   },
@@ -5501,20 +5556,68 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface Reload {\n    filename: string;\n    runtime?: Plugin.Runtime | undefined;\n}',
   },
   {
-    name: 'RemoteError',
-    declaration: 'export class RemoteError<Code extends RemoteErrorCode = RemoteErrorCode> extends Error {\n    readonly isDSHRemoteError: true;\n    constructor(readonly code: Code, message: string, readonly details: RemoteErrorDetailsMap[Code], options?: ErrorOptions);\n}',
+    name: 'RemoteAuth',
+    declaration: 'export type RemoteAuth = {\n    readonly kind: \'key\';\n    readonly keyPath: string;\n    readonly passphrase?: string;\n} | {\n    readonly kind: \'password\';\n    readonly password: string;\n} | {\n    readonly kind: \'agent\';\n};',
   },
   {
-    name: 'RemoteErrorCode',
-    declaration: 'export type RemoteErrorCode = keyof RemoteErrorDetailsMap;',
+    name: 'RemoteConnection',
+    declaration: 'export interface RemoteConnection {\n    readonly id: string;\n    readonly host: string;\n    readonly port: number;\n    readonly user: string;\n    readonly auth: RemoteAuth;\n    readonly remoteRoot: string;\n    readonly connectTimeoutMs: number;\n    readonly maxTransferBytes: number;\n    readonly hostKeyFingerprint?: string;\n    readonly proxyJump?: RemoteJumpHost;\n}',
   },
   {
-    name: 'RemoteErrorDetailsMap',
-    declaration: 'export interface RemoteErrorDetailsMap {\n    \'gateway/bad-request\': {\n        readonly issues?: readonly object[];\n    };\n    \'gateway/cancelled\': {};\n    \'gateway/internal\': {};\n}',
+    name: 'RemoteEditRequest',
+    declaration: 'export interface RemoteEditRequest extends RemoteRequestBase {\n    readonly path: string;\n    readonly oldString: string;\n    readonly newString: string;\n    readonly replaceAll?: boolean;\n}',
+  },
+  {
+    name: 'RemoteEditResult',
+    declaration: 'export interface RemoteEditResult {\n    readonly path: string;\n    readonly occurrences: number;\n}',
   },
   {
     name: 'RemoteEventHostInfo',
     declaration: 'export interface RemoteEventHostInfo {\n    readonly home: string;\n}',
+  },
+  {
+    name: 'RemoteJumpHost',
+    declaration: 'export interface RemoteJumpHost {\n    readonly host: string;\n    readonly port: number;\n    readonly user: string;\n    readonly auth: RemoteAuth;\n    readonly hostKeyFingerprint?: string;\n}',
+  },
+  {
+    name: 'RemotePullRequest',
+    declaration: 'export interface RemotePullRequest extends RemoteRequestBase {\n    readonly remotePath: string;\n    readonly localPath: string;\n    readonly overwrite?: boolean;\n}',
+  },
+  {
+    name: 'RemotePushRequest',
+    declaration: 'export interface RemotePushRequest extends RemoteRequestBase {\n    readonly localPath: string;\n    readonly remotePath: string;\n    readonly overwrite?: boolean;\n}',
+  },
+  {
+    name: 'RemoteReadLine',
+    declaration: 'export interface RemoteReadLine {\n    readonly number: number;\n    readonly text: string;\n}',
+  },
+  {
+    name: 'RemoteReadRequest',
+    declaration: 'export interface RemoteReadRequest extends RemoteRequestBase {\n    readonly path: string;\n    readonly offset: number;\n    readonly limit: number;\n}',
+  },
+  {
+    name: 'RemoteReadResult',
+    declaration: 'export interface RemoteReadResult {\n    readonly path: string;\n    readonly lines: readonly RemoteReadLine[];\n    readonly totalLines: number;\n    readonly truncated: boolean;\n}',
+  },
+  {
+    name: 'RemoteRunRequest',
+    declaration: 'export interface RemoteRunRequest extends RemoteRequestBase {\n    readonly command: string;\n    readonly cwd: string;\n    readonly timeoutMs: number;\n    readonly env?: Readonly<Record<string, string>>;\n}',
+  },
+  {
+    name: 'RemoteRunResult',
+    declaration: 'export interface RemoteRunResult {\n    readonly exitCode: number | null;\n    readonly signal: string | null;\n    readonly stdout: string;\n    readonly stderr: string;\n    readonly timedOut: boolean;\n}',
+  },
+  {
+    name: 'RemoteTransferResult',
+    declaration: 'export interface RemoteTransferResult {\n    readonly localPath: string;\n    readonly remotePath: string;\n    readonly bytes: number;\n}',
+  },
+  {
+    name: 'RemoteWriteRequest',
+    declaration: 'export interface RemoteWriteRequest extends RemoteRequestBase {\n    readonly path: string;\n    readonly content: string;\n}',
+  },
+  {
+    name: 'RemoteWriteResult',
+    declaration: 'export interface RemoteWriteResult {\n    readonly path: string;\n    readonly created: boolean;\n}',
   },
   {
     name: 'RenderedDocumentBytes',
@@ -7109,6 +7212,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface WorkspaceArchiveValue {\n    readonly archivedSessionIds: readonly SessionId[];\n}',
   },
   {
+    name: 'WorkspaceAttachSessionRequest',
+    declaration: 'export interface WorkspaceAttachSessionRequest {\n    readonly workspaceId: WorkspaceId;\n    readonly sessionId: SessionId;\n}',
+  },
+  {
     name: 'WorkspaceBaseline',
     declaration: 'export interface WorkspaceBaseline {\n    readonly items: readonly WorkspaceView[];\n    readonly archivedSessionIds: readonly SessionId[];\n}',
   },
@@ -7183,6 +7290,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'WorkspaceFileWatchFrame',
     declaration: 'export type WorkspaceFileWatchFrame = {\n    readonly kind: \'ready\';\n} | {\n    readonly kind: \'change\';\n    readonly change: WorkspaceFileChange;\n};',
+  },
+  {
+    name: 'WorkspaceFileWrite',
+    declaration: 'export interface WorkspaceFileWrite extends WorkspaceFileStat {\n    readonly operation: \'create\' | \'update\';\n}',
+  },
+  {
+    name: 'WorkspaceFileWriteRequest',
+    declaration: 'export interface WorkspaceFileWriteRequest {\n    readonly path: string;\n    readonly content: string;\n}',
   },
   {
     name: 'WorkspaceFollowFrame',
