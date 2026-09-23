@@ -24,7 +24,7 @@
       "path": "../../api/workspace-files/tsconfig.client.json"
     },
     {
-      "path": "../locale"
+      "path": "../locale/tsconfig.client.json"
     },
     {
       "path": "../store"
@@ -42,7 +42,7 @@
       "path": "../ui-session"
     },
     {
-      "path": "../ui-conversation"
+      "path": "../ui-conversation/tsconfig.client.json"
     },
     {
       "path": "../ui-sidebar"
