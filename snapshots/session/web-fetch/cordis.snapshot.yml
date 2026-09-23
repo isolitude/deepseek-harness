@@ -20,6 +20,11 @@
 
 - id: web
   name: '@deepseek-ai/dsh-web'
+  config:
+    # Pin to the anonymous HTTP provider, matching the recorded fetch: the
+    # base default now routes through easytransnote, which this scenario does
+    # not exercise.
+    fetchProvider: http
 
 - id: web-fetch-http
   name: '@deepseek-ai/dsh-web-fetch-http'

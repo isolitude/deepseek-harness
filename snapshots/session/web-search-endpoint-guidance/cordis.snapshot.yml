@@ -25,6 +25,15 @@
     - id: web-search-error-fixture
       name: './web-search-error-fixture.mjs'
 
+# Pin the web seam to the DeepSeek search provider, matching the recording
+# patch: the base default routes through easytransnote, but this scenario
+# exercises the DeepSeek search provider's endpoint recovery specifically.
+- id: web
+  name: '@deepseek-ai/dsh-web'
+  config:
+    searchProvider: deepseek-official
+    fetchProvider: http
+
 - id: web-search-deepseek
   name: '@deepseek-ai/dsh-web-search-deepseek'
   config:

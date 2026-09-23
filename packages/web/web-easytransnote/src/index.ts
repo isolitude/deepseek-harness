@@ -7,9 +7,8 @@
  * @module @deepseek-ai/dsh-web-easytransnote
  */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context, Volatile } from '@deepseek-ai/cordis'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
-import type {} from '@deepseek-ai/dsh-settings'
 import { launchEnvironmentOf } from '@deepseek-ai/dsh-launch-environment'
 import type {} from '@deepseek-ai/dsh-web'
 import z from '@deepseek-ai/schemastery'
@@ -43,40 +42,40 @@ const DEFAULT_FETCH_MODEL = 'web-fetch-lite'
 /** Environment variable naming this provider's endpoint base. */
 const BASE_URL_ENV = 'EASYTRANSNOTE_BASE_URL'
 
-/** Settings namespace carrying this provider's endpoint, models, and key reference. */
-export const WEB_EASYTRANSNOTE_SETTINGS_NAMESPACE = 'web-easytransnote'
-
 /** Plugin config (all optional — `apply` fills credential, env, and constant defaults). */
 export interface Config {
   /** Literal easytransnote API key; prefer {@link apiKeyEnv} so no secret enters configuration files. */
-  apiKey?: string
+  apiKey: Volatile<string | undefined>
   /** Credential reference resolved for each operation; defaults to `EASYTRANSNOTE_API_KEY`. */
-  apiKeyEnv?: string
+  apiKeyEnv: Volatile<string>
   /** Endpoint base; `/beta/v1/web/search` and `/beta/v1/web/fetch` are appended. */
-  baseURL?: string
+  baseURL: Volatile<string | undefined>
   /** Search model name. Defaults to `web-search-base`. */
-  searchModel?: string
+  searchModel: Volatile<string>
   /** Fetch model name. Defaults to `web-fetch-lite`. */
-  fetchModel?: string
+  fetchModel: Volatile<string>
 }
 
-export const Config: z<Config> = z.object({
-  apiKey: z.string().role('secret'),
-  apiKeyEnv: z.string().role('credential-ref').default(DEFAULT_API_KEY_ENV),
-  baseURL: z.string(),
-  searchModel: z.string().default(DEFAULT_SEARCH_MODEL),
-  fetchModel: z.string().default(DEFAULT_FETCH_MODEL),
+export const Config = z.object({
+  apiKey: z.string().role('secret').volatile(),
+  apiKeyEnv: z.string().role('credential-ref').default(DEFAULT_API_KEY_ENV).volatile(),
+  baseURL: z.string().volatile(),
+  searchModel: z.string().default(DEFAULT_SEARCH_MODEL).volatile(),
+  fetchModel: z.string().default(DEFAULT_FETCH_MODEL).volatile(),
 })
 
 /**
  * Project one resolved section into the options the providers serve their next
- * operation with. Environment fallbacks stay here rather than in the providers.
+ * operation with. Environment fallbacks stay here rather than in the providers:
+ * every value it reads is already fully defaulted.
  * @param ctx - plugin context supplying the credential and environment planes.
  * @param config - the currently authoritative section.
  * @returns options for one search or fetch.
  */
-function resolveOptions(ctx: Context, config: Config): EasyTransnoteProviderOptions {
-  const ref = credentialRef(config.apiKeyEnv ?? DEFAULT_API_KEY_ENV)
+function resolveOptions(
+  ctx: Context, config: { [K in keyof Config]: ReturnType<Config[K]['get']> },
+): EasyTransnoteProviderOptions {
+  const apiKeyEnv = credentialRef(config.apiKeyEnv)
   const literalApiKey = config.apiKey !== undefined && config.apiKey.length > 0
     ? config.apiKey
     : undefined
@@ -84,33 +83,28 @@ function resolveOptions(ctx: Context, config: Config): EasyTransnoteProviderOpti
     ...literalApiKey === undefined ? {} : { apiKey: literalApiKey },
     resolveApiKey: async () => {
       const credentials = ctx.get('credentials')
-      if (credentials !== undefined) return (await credentials.resolve(ref))?.value
+      if (credentials !== undefined) return (await credentials.resolve(apiKeyEnv))?.value
       // Without the seam the environment is the whole credential plane.
-      const ambient = launchEnvironmentOf(ctx).get(ref)
+      const ambient = launchEnvironmentOf(ctx).get(apiKeyEnv)
       return ambient !== undefined && ambient.value.length > 0 ? ambient.value : undefined
     },
-    apiKeyEnv: config.apiKeyEnv ?? DEFAULT_API_KEY_ENV,
+    apiKeyEnv,
     baseURL: config.baseURL
       ?? launchEnvironmentOf(ctx).get(BASE_URL_ENV)?.value
       ?? EASYTRANSNOTE_DEFAULT_BASE_URL,
-    searchModel: config.searchModel ?? DEFAULT_SEARCH_MODEL,
-    fetchModel: config.fetchModel ?? DEFAULT_FETCH_MODEL,
+    searchModel: config.searchModel,
+    fetchModel: config.fetchModel,
   }
 }
 
 /** Register the easytransnote search and fetch providers with `ctx.web`. */
 export function apply(ctx: Context, config: Config): void {
-  let current: () => Config = () => config
-  ctx.inject(['settings'], (settingsCtx) => {
-    settingsCtx.settings.installSection(ctx, WEB_EASYTRANSNOTE_SETTINGS_NAMESPACE, Config, config, {
-      setSource: (source) => {
-        current = source
-      },
-      // The registration carries no resolved value: each provider projects the
-      // section per operation, so a committed change needs no re-registration.
-      onChange: () => {},
-    })
-  })
-  ctx.web.registerSearchProvider(new EasyTransnoteSearchProvider(() => resolveOptions(ctx, current())))
-  ctx.web.registerFetchProvider(new EasyTransnoteFetchProvider(() => resolveOptions(ctx, current())))
+  ctx.web.registerSearchProvider(new EasyTransnoteSearchProvider(() => resolveOptions(ctx, {
+    apiKey: config.apiKey.get(), apiKeyEnv: config.apiKeyEnv.get(), baseURL: config.baseURL.get(),
+    searchModel: config.searchModel.get(), fetchModel: config.fetchModel.get(),
+  })))
+  ctx.web.registerFetchProvider(new EasyTransnoteFetchProvider(() => resolveOptions(ctx, {
+    apiKey: config.apiKey.get(), apiKeyEnv: config.apiKeyEnv.get(), baseURL: config.baseURL.get(),
+    searchModel: config.searchModel.get(), fetchModel: config.fetchModel.get(),
+  })))
 }

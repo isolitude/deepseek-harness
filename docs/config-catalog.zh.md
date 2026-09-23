@@ -3982,19 +3982,21 @@ export interface Config {
 /** Plugin config (all optional — `apply` fills credential, env, and constant defaults). */
 export interface Config {
   /** Literal easytransnote API key; prefer {@link apiKeyEnv} so no secret enters configuration files. */
-  apiKey?: string
+  apiKey: Volatile<string | undefined>
   /** Credential reference resolved for each operation; defaults to `EASYTRANSNOTE_API_KEY`. */
-  apiKeyEnv?: string
+  apiKeyEnv: Volatile<string>
   /** Endpoint base; `/beta/v1/web/search` and `/beta/v1/web/fetch` are appended. */
-  baseURL?: string
+  baseURL: Volatile<string | undefined>
   /** Search model name. Defaults to `web-search-base`. */
-  searchModel?: string
+  searchModel: Volatile<string>
   /** Fetch model name. Defaults to `web-fetch-lite`. */
-  fetchModel?: string
+  fetchModel: Volatile<string>
 }
 ```
 
-来源：[`packages/web/web-easytransnote/src/index.ts:50`](../packages/web/web-easytransnote/src/index.ts)
+取决于：`Volatile`（`@deepseek-ai/cordis`）
+
+来源：[`packages/web/web-easytransnote/src/index.ts:46`](../packages/web/web-easytransnote/src/index.ts)
 
 <a id="deepseek-aidsh-web-fetch-http"></a>
 
