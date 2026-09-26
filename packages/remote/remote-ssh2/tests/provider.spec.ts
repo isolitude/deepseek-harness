@@ -310,7 +310,11 @@ class FakeChannel extends EventEmitter {
     this.destroyed = true
     this.stdout.emit('data', Buffer.from(this.state.channelStdout, 'utf8'))
     this.stderr.emit('data', Buffer.from(this.state.channelStderr, 'utf8'))
-    this.emit('exit', this.state.channelExitCode, this.state.channelSignal)
+    // ssh2 emits `exit` with a signal argument only on `exit-signal`; a normal
+    // `exit-status` carries the code as its sole argument. Mirror that arity so
+    // the provider's `sig ?? null` normalization is exercised.
+    if (this.state.channelSignal === null) this.emit('exit', this.state.channelExitCode)
+    else this.emit('exit', null, this.state.channelSignal)
     this.emit('close')
   }
 

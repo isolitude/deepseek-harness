@@ -687,7 +687,10 @@ export class Ssh2RemoteExecutor extends RemoteExecutor {
     const closing = trackClose(channel)
     channel.on('exit', (code: number | null, sig: string | null) => {
       exitCode = code
-      signal = sig
+      // ssh2 emits `exit` with one argument on a normal `exit-status` and with a
+      // signal argument only on `exit-signal`, so `sig` is `undefined` for a
+      // completed command; normalize it to the `null` the result contract declares.
+      signal = sig ?? null
     })
     channel.write(`${request.command}\n`)
     channel.end()
