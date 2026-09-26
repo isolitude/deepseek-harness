@@ -65,6 +65,15 @@ export type ReferenceLoad =
   | { readonly ok: true; readonly text: string }
   | { readonly ok: false; readonly error: SnapshotError }
 
+/** File extensions rendered as a live image instead of being read as text. */
+const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'ico', 'avif', 'svg'])
+
+/** Whether a path names an image file, rendered inline rather than read as text. */
+export function isImagePath(path: string): boolean {
+  const dot = path.lastIndexOf('.')
+  return dot >= 0 && IMAGE_EXTENSIONS.has(path.slice(dot + 1).toLowerCase())
+}
+
 /** Matches an analysis-root resonance config `resonances_config*.toml`. */
 const RESONANCE_CONFIG_PATTERN = /^resonances_config.*\.toml$/
 /** Matches an analysis-root LLM fit config `llm_config*.toml`. */

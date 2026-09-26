@@ -40,7 +40,7 @@ import {
   type TaskStatus,
   type TaskView,
 } from './presenters.ts'
-import { ReferenceDocument } from './reference-document.tsx'
+import { ImageReference, ReferenceDocument } from './reference-document.tsx'
 import { Dag } from './Dag.tsx'
 import type {
   AgentPhase,
@@ -697,6 +697,13 @@ function referencePreview(
       </div>
     )
   }
+  if (reference.kind === 'ready-image') {
+    return (
+      <div className={css.refBody}>
+        <ImageReference path={reference.path} workspacePath={workspacePath} label={t('panel.imagePreview')} />
+      </div>
+    )
+  }
   return (
     <div className={css.refBody}>
       <ReferenceDocument path={reference.path} text={reference.text} workspacePath={workspacePath} t={t} />
@@ -907,6 +914,13 @@ function taskFilePreview(
         <button type="button" className={css.refresh} onClick={() => { selectFile(taskFile.path) }}>
           {t('panel.error.retry')}
         </button>
+      </div>
+    )
+  }
+  if (taskFile.kind === 'ready-image') {
+    return (
+      <div className={css.refBody}>
+        <ImageReference path={taskFile.path} workspacePath={workspacePath} label={t('panel.imagePreview')} />
       </div>
     )
   }

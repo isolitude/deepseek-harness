@@ -46,6 +46,7 @@ export const en = {
   'panel.copied': 'Copied',
   'panel.footnotes': 'Footnotes',
   'panel.htmlPreview': 'HTML document',
+  'panel.imagePreview': 'Image preview',
   'panel.error.agent': 'Could not open the agent session:',
 } as const
 
@@ -98,6 +99,7 @@ export const zh = {
   'panel.copied': '已复制',
   'panel.footnotes': '脚注',
   'panel.htmlPreview': 'HTML 文档',
+  'panel.imagePreview': '图片预览',
   'panel.error.agent': '无法打开 Agent 会话：',
 } as const
 

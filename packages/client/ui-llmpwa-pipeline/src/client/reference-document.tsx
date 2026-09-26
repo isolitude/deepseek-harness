@@ -11,6 +11,7 @@ import type { ReactNode } from 'react'
 import { CodeBlock, MarkdownText } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { MarkdownLabels, MarkdownPathImages } from '@deepseek-ai/dsh-client-ui-primitives'
 import { themedHtml } from './html-theme.ts'
+import { isImagePath } from './load.ts'
 import css from './Workbench.module.css'
 
 /** A `ReferenceDocument` render call's locale seat. */
@@ -21,8 +22,8 @@ export interface ReferenceDocumentProps {
   text: string
   /** The workspace root's canonical host path; resolves relative markdown images. */
   workspacePath?: string | undefined
-  /** Locale seat: resolves the markdown/code chrome copy and the HTML frame label. */
-  t: (key: 'panel.copy' | 'panel.copied' | 'panel.footnotes' | 'panel.htmlPreview') => string
+  /** Locale seat: resolves the markdown/code chrome copy, the HTML frame, and the image label. */
+  t: (key: 'panel.copy' | 'panel.copied' | 'panel.footnotes' | 'panel.htmlPreview' | 'panel.imagePreview') => string
 }
 
 /** File extensions rendered as full markdown (not a code block). */
@@ -146,9 +147,58 @@ export function HtmlPreview({ text, label }: { text: string; label: string }): R
 }
 
 /**
+ * Resolve one image file to the same-origin authenticated `/api/file` URL that
+ * serves its bytes, or `undefined` when local files cannot be served (no
+ * workspace path, or the page is not over HTTP(S)). The path is treated as an
+ * absolute host path, matching how {@link buildPathImages} serves figures.
+ * @param workspacePath - the workspace root's canonical host path.
+ * @param filePath - the image file's workspace-relative path.
+ * @param protocol - the page's URL protocol at render time (defaults to the live window).
+ * @param origin - the page's URL origin at render time (defaults to the live window).
+ * @returns the image URL, or `undefined` when local files cannot be served.
+ */
+export function imageSource(
+  workspacePath: string | undefined,
+  filePath: string,
+  protocol = window.location.protocol,
+  origin = window.location.origin,
+): string | undefined {
+  if (workspacePath === undefined) return undefined
+  if (protocol !== 'http:' && protocol !== 'https:') return undefined
+  const absolute = `${workspacePath}/${filePath}`
+  return `${origin}/api/file?path=${encodeURIComponent(absolute)}`
+}
+
+/**
+ * Render an image reference inline from the workspace `/api/file` endpoint, so
+ * a figure under `4_图片/` displays instead of failing as a not-a-text file. The
+ * image sits scaled to the pane width and scrolls vertically with the rest of
+ * the reference body.
+ * @param path - the image file's workspace-relative path.
+ * @param workspacePath - the workspace root's canonical host path.
+ * @param label - the localized accessibility name for the image.
+ * @returns an inline image, or nothing when the file cannot be served.
+ */
+export function ImageReference({
+  path,
+  workspacePath,
+  label,
+}: {
+  path: string
+  workspacePath: string | undefined
+  label: string
+}): ReactNode {
+  /* v8 ignore next -- an image renders only when the workspace path resolves, so the undefined arm is unreachable in practice. */
+  const source = imageSource(workspacePath, path)
+  return source === undefined
+    ? null
+    : <img className={css.refImage} src={source} alt={label} data-image-reference />
+}
+
+/**
  * Render one reference file as a document: GFM for markdown, a live HTML
- * document for `.html`, shiki-highlighted code for other types, and a plain pre
- * (no background) as the safe fallback.
+ * document for `.html`, an inline image for image files, shiki-highlighted code
+ * for other types, and a plain pre (no background) as the safe fallback.
  */
 export const ReferenceDocument = memo(function ReferenceDocument({ path, text, workspacePath, t }: ReferenceDocumentProps) {
   const labels = useMemo(() => markdownLabels(t), [t])
@@ -158,6 +208,9 @@ export const ReferenceDocument = memo(function ReferenceDocument({ path, text, w
   }
   if (isHtmlReference(path)) {
     return <HtmlPreview text={text} label={t('panel.htmlPreview')} />
+  }
+  if (isImagePath(path)) {
+    return <ImageReference path={path} workspacePath={workspacePath} label={t('panel.imagePreview')} />
   }
   const lang = referenceLang(path)
   if (lang === undefined) {

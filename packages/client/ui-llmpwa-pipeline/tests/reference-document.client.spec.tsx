@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 /**
  * The reference-document renderer: GFM for markdown files, a live HTML
- * document for `.html`, shiki-highlighted code for other types, and a plain
- * pre as the safe fallback. Each arm is asserted on user-visible output.
+ * document for `.html`, an inline image for image files, shiki-highlighted code
+ * for other types, and a plain pre as the safe fallback. Each arm is asserted
+ * on user-visible output.
  */
 import { afterEach, describe, expect, it } from 'vitest'
 import { cleanup, render, screen } from '@testing-library/react'
-import { buildPathImages, isMarkdownReference, isHtmlReference, referenceLang, ReferenceDocument } from '../src/client/reference-document.tsx'
+import { buildPathImages, imageSource, ImageReference, isMarkdownReference, isHtmlReference, referenceLang, ReferenceDocument } from '../src/client/reference-document.tsx'
 
 const t = (key: string): string => key
 
@@ -62,6 +63,24 @@ describe('ReferenceDocument', () => {
     expect(frame?.getAttribute('srcdoc')).toContain('color-scheme')
   })
 
+  it('renders an image file inline from the workspace file API, not as code', () => {
+    const { container } = render(
+      <ReferenceDocument
+        path="LLMPWA/analyses/kk_dis/task/t1/4_图片/pictures/fig.png"
+        text="ignored"
+        workspacePath="/home/user/ws"
+        t={t}
+      />,
+    )
+    const img = container.querySelector('[data-image-reference]')
+    expect(img).toBeTruthy()
+    expect(img?.getAttribute('src')).toBe(
+      'http://localhost:3000/api/file?path=%2Fhome%2Fuser%2Fws%2FLLMPWA%2Fanalyses%2Fkk_dis%2Ftask%2Ft1%2F4_%E5%9B%BE%E7%89%87%2Fpictures%2Ffig.png',
+    )
+    // The image is not rendered as a highlighted code block.
+    expect(screen.queryByRole('button', { name: 'panel.copy' })).toBeNull()
+  })
+
   it('highlights a code file with its language and a copy action', () => {
     render(<ReferenceDocument path="resonances_config.toml" text={'[resonances]\n# config'} t={t} />)
     // The shared CodeBlock's language banner names the grammar.
@@ -101,6 +120,35 @@ describe('buildPathImages', () => {
     expect(resolve?.resolve('')).toBeUndefined()
     expect(resolve?.resolve('//cdn.example.com/x.png')).toBeUndefined()
     expect(resolve?.resolve('a\0b.png')).toBeUndefined()
+  })
+})
+
+describe('imageSource and ImageReference', () => {
+  it('resolves an image workspace path to the authenticated /api/file URL', () => {
+    expect(imageSource('/home/user/ws', 'LLMPWA/analyses/kk_dis/task/t1/4_图片/pictures/fig.png')).toBe(
+      'http://localhost:3000/api/file?path=%2Fhome%2Fuser%2Fws%2FLLMPWA%2Fanalyses%2Fkk_dis%2Ftask%2Ft1%2F4_%E5%9B%BE%E7%89%87%2Fpictures%2Ffig.png',
+    )
+  })
+
+  it('returns no image URL without a workspace path or off an HTTP(S) page', () => {
+    expect(imageSource(undefined, 'fig.png')).toBeUndefined()
+    expect(imageSource('/home/user/ws', 'fig.png', 'file:')).toBeUndefined()
+  })
+
+  it('renders an inline image with the image label', () => {
+    const { container } = render(
+      <ImageReference path="4_图片/pictures/fig.png" workspacePath="/home/user/ws" label="panel.imagePreview" />,
+    )
+    const img = container.querySelector('[data-image-reference]')
+    expect(img).toBeTruthy()
+    expect(img?.getAttribute('alt')).toBe('panel.imagePreview')
+  })
+
+  it('renders nothing when the image cannot be served', () => {
+    const { container } = render(
+      <ImageReference path="fig.png" workspacePath={undefined} label="panel.imagePreview" />,
+    )
+    expect(container.querySelector('[data-image-reference]')).toBeNull()
   })
 })
 

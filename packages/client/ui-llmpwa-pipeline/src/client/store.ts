@@ -29,6 +29,7 @@ export type ReferencePhase =
   | { readonly kind: 'idle' }
   | { readonly kind: 'loading'; readonly path: string }
   | { readonly kind: 'ready'; readonly path: string; readonly text: string }
+  | { readonly kind: 'ready-image'; readonly path: string }
   | { readonly kind: 'failed'; readonly path: string; readonly error: SnapshotError }
 
 /** Whether the agent drawer's session launch is idle, running, or settled. */
@@ -110,6 +111,7 @@ type WorkbenchActions = {
   referencesReady: (draft: WorkbenchState, references: readonly ReferenceFile[]) => void
   referenceLoading: (draft: WorkbenchState, path: string) => void
   referenceReady: (draft: WorkbenchState, path: string, text: string) => void
+  referenceImageReady: (draft: WorkbenchState, path: string) => void
   referenceFailed: (draft: WorkbenchState, path: string, error: SnapshotError) => void
   tasksLoading: (draft: WorkbenchState) => void
   tasksReady: (draft: WorkbenchState, tasks: readonly TaskEntry[]) => void
@@ -132,6 +134,7 @@ type WorkbenchActions = {
   taskDirToggle: (draft: WorkbenchState, path: string) => void
   taskFileLoading: (draft: WorkbenchState, path: string) => void
   taskFileReady: (draft: WorkbenchState, path: string, text: string) => void
+  taskFileImageReady: (draft: WorkbenchState, path: string) => void
   taskFileFailed: (draft: WorkbenchState, path: string, error: SnapshotError) => void
   agentOpened: (draft: WorkbenchState) => void
   agentClosed: (draft: WorkbenchState) => void
@@ -244,6 +247,8 @@ export function createWorkbenchStore(): EngineStoreHandle<WorkbenchState, Workbe
       referenceLoading: (d, path) => { d.reference = { kind: 'loading', path } },
       /** Keep the loaded reference text. */
       referenceReady: (d, path, text) => { d.reference = { kind: 'ready', path, text } },
+      /** Keep the selected reference file as a renderable image (never read as text). */
+      referenceImageReady: (d, path) => { d.reference = { kind: 'ready-image', path } },
       /** Record why the reference file could not be read. */
       referenceFailed: (d, path, error) => { d.reference = { kind: 'failed', path, error } },
       /** Mark the tasks list read as in flight. */
@@ -303,6 +308,8 @@ export function createWorkbenchStore(): EngineStoreHandle<WorkbenchState, Workbe
       taskFileLoading: (d, path) => { d.taskFile = { kind: 'loading', path } },
       /** Keep the loaded task file text. */
       taskFileReady: (d, path, text) => { d.taskFile = { kind: 'ready', path, text } },
+      /** Keep the selected task file as a renderable image (never read as text). */
+      taskFileImageReady: (d, path) => { d.taskFile = { kind: 'ready-image', path } },
       /** Record why the task file could not be read. */
       taskFileFailed: (d, path, error) => { d.taskFile = { kind: 'failed', path, error } },
       /** Open the agent drawer for the selected analysis. */

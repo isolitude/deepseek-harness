@@ -116,6 +116,14 @@ describe('workbench store', () => {
     })
   })
 
+  it('walks the reference read phase to a ready image', () => {
+    const instance = createWorkbenchStore().create()
+    instance.actions.referenceLoading('4_图片/pictures/fig.png')
+    expect(instance.getSnapshot().reference).toEqual({ kind: 'loading', path: '4_图片/pictures/fig.png' })
+    instance.actions.referenceImageReady('4_图片/pictures/fig.png')
+    expect(instance.getSnapshot().reference).toEqual({ kind: 'ready-image', path: '4_图片/pictures/fig.png' })
+  })
+
   it('switches the preview tab', () => {
     const instance = createWorkbenchStore().create()
     expect(instance.getSnapshot().view).toBe('dag')
@@ -289,6 +297,14 @@ describe('workbench store', () => {
     expect(instance.getSnapshot().taskFile).toEqual({
       kind: 'failed', path: 'b.md', error: { kind: 'unexpected', message: 'no' },
     })
+  })
+
+  it('walks the task file read phase to a ready image', () => {
+    const instance = createWorkbenchStore().create()
+    instance.actions.taskFileLoading('4_图片/pictures/fig.png')
+    expect(instance.getSnapshot().taskFile).toEqual({ kind: 'loading', path: '4_图片/pictures/fig.png' })
+    instance.actions.taskFileImageReady('4_图片/pictures/fig.png')
+    expect(instance.getSnapshot().taskFile).toEqual({ kind: 'ready-image', path: '4_图片/pictures/fig.png' })
   })
 
   it('switches the preview tab to tasks and back', () => {

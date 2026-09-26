@@ -31,6 +31,7 @@ import {
   listTaskDir as fetchTaskDir,
   loadTaskFileText as fetchTaskFile,
   analysisWorkspaceCwd,
+  isImagePath,
   type Analysis,
   type WorkspaceFilesLoadRemote,
 } from './load.ts'
@@ -312,6 +313,12 @@ export function workbenchFace(
     const loadReference = (sessionId: SessionId, path: string, signal: AbortSignal): void => {
       if (signal.aborted) return
       actions.referenceLoading(path)
+      // An image is never read as text (the Host refuses it as not UTF-8); it is
+      // rendered inline from its workspace URL, so the read settles immediately.
+      if (isImagePath(path)) {
+        actions.referenceImageReady(path)
+        return
+      }
       void fetchReference(remote, sessionId, path, signal).then((load) => {
         if (signal.aborted) return
         if (load.ok) {
@@ -351,6 +358,12 @@ export function workbenchFace(
     const loadTaskFile = (sessionId: SessionId, path: string, signal: AbortSignal): void => {
       if (signal.aborted) return
       actions.taskFileLoading(path)
+      // An image is never read as text (the Host refuses it as not UTF-8); it is
+      // rendered inline from its workspace URL, so the read settles immediately.
+      if (isImagePath(path)) {
+        actions.taskFileImageReady(path)
+        return
+      }
       void fetchTaskFile(remote, sessionId, path, signal).then((load) => {
         if (signal.aborted) return
         if (load.ok) {

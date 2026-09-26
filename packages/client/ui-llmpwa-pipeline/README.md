@@ -91,7 +91,7 @@ None; the workbench does not assemble or mutate provider requests.
 
 - **Snapshot-only preview** — the workbench renders `gen/pipeline_state.json` as last exported; it does not execute or validate the pipeline.
 - **One agent session per analysis** — reopening an analysis reuses its recorded live session; launching a new one clears the prior context.
-- **Task image preview** — the Tasks tab's file tree lists image files under `4_图片/` but previews them as plain text through the text reader; no binary/image rendering is added here.
+- **Image preview scoped to the workspace** — the Tasks tab's file tree lists image files under `4_图片/` and previews them inline through the workspace file API, so it renders only when the page is served over HTTP(S) from a workspace-backed session; off-host or non-HTTP pages fall back to the text-error arm.
 
 <a id="dev-note"></a>
 ### Dev Note

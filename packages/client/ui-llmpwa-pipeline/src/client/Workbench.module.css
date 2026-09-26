@@ -448,6 +448,16 @@
   word-break: break-word;
 }
 
+/* Image reference files (figures under a task's image folder) render inline
+   scaled to the pane width, scrolling with the rest of the reference body. */
+.refImage {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 8px auto;
+  border-radius: 6px;
+}
+
 /* The tasks tab: a grid of task cards. */
 .taskCards {
   display: grid;

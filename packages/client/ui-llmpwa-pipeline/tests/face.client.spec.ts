@@ -445,6 +445,17 @@ describe('workbenchFace', () => {
     expect(instance.getSnapshot().reference).toEqual({ kind: 'ready', path: 'p.toml', text: '# title' })
   })
 
+  it('renders a reference image without reading its text', async () => {
+    const read = vi.fn()
+    const r = remote(vi.fn(), read)
+    const instance = createWorkbenchStore().create()
+    const { face } = makeFace(r, makeSessions(), makeWorkspaces(), instance.actions)
+    face.loadReference(SESSION, '4_图片/pictures/fig.png', new AbortController().signal)
+    // An image is settled as ready-image immediately and never read as text.
+    expect(instance.getSnapshot().reference).toEqual({ kind: 'ready-image', path: '4_图片/pictures/fig.png' })
+    expect(read).not.toHaveBeenCalled()
+  })
+
   it('records a reference read failure', async () => {
     const r = remote(
       vi.fn(),
@@ -684,6 +695,17 @@ describe('workbenchFace', () => {
     expect(instance.getSnapshot().taskFile).toEqual({ kind: 'loading', path: 'p.md' })
     await tick()
     expect(instance.getSnapshot().taskFile).toEqual({ kind: 'ready', path: 'p.md', text: '# title' })
+  })
+
+  it('renders a task image without reading its text', async () => {
+    const read = vi.fn()
+    const r = remote(vi.fn(), read)
+    const instance = createWorkbenchStore().create()
+    const { face } = makeFace(r, makeSessions(), makeWorkspaces(), instance.actions)
+    face.loadTaskFile(SESSION, '4_图片/pictures/fig.png', new AbortController().signal)
+    // An image is settled as ready-image immediately and never read as text.
+    expect(instance.getSnapshot().taskFile).toEqual({ kind: 'ready-image', path: '4_图片/pictures/fig.png' })
+    expect(read).not.toHaveBeenCalled()
   })
 
   it('records a task file read failure', async () => {

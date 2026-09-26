@@ -8,6 +8,7 @@ import {
   ANALYSES_ROOT,
   analysisForSession,
   analysisSettingsPath,
+  isImagePath,
   listAnalyses, loadSnapshot, missingSnapshotHint, PIPELINE_STATE_FILE,
   listReferenceFiles, loadReferenceText,
   readAnalysisAgentSession, writeAnalysisAgentSession,
@@ -496,5 +497,21 @@ describe('loadTaskFileText', () => {
     }))
     const load = await loadTaskFileText(r, SESSION, 'x.md', new AbortController().signal)
     expect(load).toEqual({ ok: false, error: { kind: 'missing', message: 'gone' } })
+  })
+})
+
+describe('isImagePath', () => {
+  it('recognizes common image extensions case-insensitively', () => {
+    expect(isImagePath('4_图片/pictures/b123_kk_weight.png')).toBe(true)
+    expect(isImagePath('report.JPG')).toBe(true)
+    expect(isImagePath('plot.webp')).toBe(true)
+    expect(isImagePath('a/b/fig.svg')).toBe(true)
+  })
+
+  it('returns false for non-image and extensionless paths', () => {
+    expect(isImagePath('report.md')).toBe(false)
+    expect(isImagePath('status.json')).toBe(false)
+    expect(isImagePath('noextension')).toBe(false)
+    expect(isImagePath('archive.tar.gz')).toBe(false)
   })
 })

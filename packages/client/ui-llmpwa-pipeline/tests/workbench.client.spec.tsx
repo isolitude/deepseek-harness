@@ -337,6 +337,21 @@ describe('Workbench', () => {
     expect(screen.getByText('toml')).toBeTruthy()
   })
 
+  it('renders an image reference inline, not as text', () => {
+    const { props, instance } = makeProps()
+    instance.actions.opened()
+    instance.actions.selected('kk_dis')
+    instance.actions.referencesReady([{ path: 'p/fig.png', name: 'fig.png' }])
+    instance.actions.referenceImageReady('p/fig.png')
+    const { container } = render(<Workbench {...props} />)
+    openDocs()
+    const img = container.querySelector('[data-image-reference]')
+    expect(img).toBeTruthy()
+    expect(img?.getAttribute('src')).toContain('/api/file?path=')
+    // The image is not rendered as a highlighted code block.
+    expect(screen.queryByRole('button', { name: 'panel.copy' })).toBeNull()
+  })
+
   it('renders a markdown reference file as a document', () => {
     const { props, instance } = makeProps()
     instance.actions.opened()
@@ -991,6 +1006,26 @@ describe('Workbench', () => {
     expect(frame?.getAttribute('sandbox')).toBe('allow-scripts')
     expect(frame?.getAttribute('srcdoc')).toContain('<h1>Report</h1>')
     // No code-block banner is drawn for the HTML document.
+    expect(screen.queryByRole('button', { name: 'panel.copy' })).toBeNull()
+  })
+
+  it('renders a task image inline from the file tree, not as text', () => {
+    const { props, instance } = makeProps()
+    instance.actions.opened()
+    instance.actions.listed([{ dir: 'kk_dis' }])
+    instance.actions.selected('kk_dis')
+    instance.actions.tasksReady([{ id: 't1', dir: 'LLMPWA/analyses/kk_dis/task/t1' }])
+    instance.actions.taskOpened('t1')
+    instance.actions.taskDirReady('LLMPWA/analyses/kk_dis/task/t1', [
+      { path: 'LLMPWA/analyses/kk_dis/task/t1/4_图片/pictures/fig.png', name: 'fig.png', kind: 'file' },
+    ])
+    instance.actions.taskFileImageReady('LLMPWA/analyses/kk_dis/task/t1/4_图片/pictures/fig.png')
+    const { container } = render(<Workbench {...props} />)
+    openTasks()
+    const img = container.querySelector('[data-image-reference]')
+    expect(img).toBeTruthy()
+    expect(img?.getAttribute('src')).toContain('/api/file?path=')
+    // The image is not rendered as a highlighted code block.
     expect(screen.queryByRole('button', { name: 'panel.copy' })).toBeNull()
   })
 
