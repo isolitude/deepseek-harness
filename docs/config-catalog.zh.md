@@ -2324,7 +2324,7 @@ export interface Config {
 }
 ```
 
-来源：[`packages/remote/remote-ssh2/src/index.ts:46`](../packages/remote/remote-ssh2/src/index.ts)
+来源：[`packages/remote/remote-ssh2/src/index.ts:48`](../packages/remote/remote-ssh2/src/index.ts)
 
 <a id="deepseek-aidsh-repeat-tool-reminder"></a>
 

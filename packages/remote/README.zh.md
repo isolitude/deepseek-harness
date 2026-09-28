@@ -35,7 +35,7 @@ ssh 组为 agent 提供经 SSH 的远程命令执行与文件传输，同时不�
 <a id="related-documentation"></a>
 ## 相关文档
 
-- [远程 SSH 工具计划](../../LLMPWA/documentation/ssh-remote-tools-plan.md) — 本家族实现的按 analysis 组合设计、决策点与凭据存储指南。
+- [SSH keepalive 与 `remote_exec` 后台化](../../.agents/notes/implemented/feature/2026-09-12-ssh-keepalive-and-background-exec.zh.md) — 本家族实现的 keepalive 默认与 `run_in_background` 任务面。
 - [文件系统子系统](../../docs/subsystems/filesystem.zh.md) — 远程文件工具所补充的本地文件系统接缝。
 
 -----

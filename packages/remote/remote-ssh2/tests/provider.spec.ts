@@ -157,6 +157,8 @@ const fake = vi.hoisted(() => {
     /** When true, end() settles the channel like an instantly-finished command. */
     autoSettle: true,
     instances: 0,
+    /** Every fake Client created, in order, so tests can drive a live pooled client. */
+    clients: [] as Array<EventEmitter>,
     /** Records each forwardOut(dst) request in the order it was made. */
     forwardOuts: [] as Array<{ srcPort: number; dstIP: string; dstPort: number }>,
     /** When set, the next forwardOut rejects with this error. */
@@ -189,6 +191,7 @@ vi.mock('ssh2', () => {
 
       connect(opts: Record<string, unknown>): void {
         State.instances += 1
+        State.clients.push(this)
         State.connectOpts.push(opts)
         // Record whether this connection rode a jump forward stream.
         if (opts['sock'] !== undefined) State.sawSock = true
@@ -370,7 +373,7 @@ async function acquireClient(exec: Ssh2RemoteExecutor, conn: RemoteConnection = 
 
 interface FakeClientLike {
   pendingChannel: FakeChannel | undefined
-  emit?: (event: string) => void
+  emit?: (event: string, ...args: unknown[]) => void
 }
 
 let dir: string
@@ -391,6 +394,7 @@ beforeEach(async () => {
   fake.State.killSettles = false
   fake.State.autoSettle = true
   fake.State.instances = 0
+  fake.State.clients = []
   fake.State.forwardOuts = []
   fake.State.nextForwardError = undefined
   fake.State.forwardStream = undefined
@@ -507,6 +511,20 @@ describe('connection policy and pooling', () => {
     // Simulate the remote closing the socket: emit 'close' on the live client.
     const live = fake.State.instances
     ;(await acquireClient(executor)).emit?.('close')
+    const again = await executor.readText(connection(), { path: 'a.txt', offset: 1, limit: 10 })
+    expect(again.lines[0]).toMatchObject({ number: 1, text: 'hello' })
+    expect(fake.State.instances).toBeGreaterThanOrEqual(live + 1)
+  })
+
+  it('absorbs a keepalive timeout on a live pooled client and rebuilds the connection', async () => {
+    fake.State.sftp!.withFile('a.txt', 'hello')
+    await executor.readText(connection(), { path: 'a.txt', offset: 1, limit: 10 })
+    expect(fake.State.instances).toBe(1)
+    // ssh2 emits `error` (level 'client-timeout') on an established client when
+    // the keepalive detects a lost peer. With no listener that event is an
+    // uncaught exception; the provider must absorb it and mark the slot stale.
+    const live = fake.State.instances
+    ;(await acquireClient(executor)).emit?.('error', new Error('Keepalive timeout'))
     const again = await executor.readText(connection(), { path: 'a.txt', offset: 1, limit: 10 })
     expect(again.lines[0]).toMatchObject({ number: 1, text: 'hello' })
     expect(fake.State.instances).toBeGreaterThanOrEqual(live + 1)
@@ -744,6 +762,130 @@ describe('run', () => {
       cwd: '/home/phys/workspace',
       timeoutMs: 10_000,
     })).rejects.toMatchObject({ code: 'REMOTE_IO_ERROR' })
+  })
+
+  it('rejects a non-positive finite timeout without opening a channel', async () => {
+    const channel = new FakeChannel(fake.State)
+    const client = await acquireClient(executor)
+    client.pendingChannel = channel
+    fake.State.killSettles = true
+    for (const timeoutMs of [0, -1, Number.NaN, undefined]) {
+      await expect(executor.run(connection(), {
+        command: 'ls',
+        cwd: '/home/phys/workspace',
+        ...timeoutMs === undefined ? {} : { timeoutMs },
+      })).rejects.toMatchObject({ code: 'REMOTE_IO_ERROR' })
+    }
+  })
+})
+
+describe('start (detached streaming)', () => {
+  it('returns a streaming handle that settles with exit facts and output', async () => {
+    const channel = new FakeChannel(fake.State)
+    const client = await acquireClient(executor)
+    client.pendingChannel = channel
+    fake.State.channelStdout = 'streamed out'
+    fake.State.channelStderr = 'streamed err'
+    fake.State.channelExitCode = 2
+    fake.State.channelSignal = null
+    const handle = await executor.start(connection(), { command: 'long run', cwd: '/home/phys/workspace' })
+    const result = await handle.done
+    expect(result).toMatchObject({ exitCode: 2, signal: null, stdout: 'streamed out', stderr: 'streamed err', timedOut: false })
+    expect(handle.stdout.total).toBe('streamed out'.length)
+    expect(handle.stdout.readFrom(0)).toMatchObject({ text: 'streamed out', lossy: false })
+    expect(handle.stderr.readFrom(0)).toMatchObject({ text: 'streamed err' })
+  })
+
+  it('supports incremental reads across data emission before close', async () => {
+    fake.State.autoSettle = false
+    const channel = new FakeChannel(fake.State)
+    const client = await acquireClient(executor)
+    client.pendingChannel = channel
+    const handle = await executor.start(connection(), { command: 'tail -f', cwd: '/home/phys/workspace' })
+    channel.stdout.emit('data', Buffer.from('part one'))
+    expect(handle.stdout.readFrom(0).text).toBe('part one')
+    channel.stdout.emit('data', Buffer.from(' part two'))
+    expect(handle.stdout.readFrom(0).text).toBe('part one part two')
+    channel.settle()
+    await handle.done
+  })
+
+  it('kill requests termination and the done promise settles killed', async () => {
+    fake.State.killSettles = true
+    fake.State.channelSignal = 'SIGKILL'
+    fake.State.channelExitCode = null
+    const channel = new FakeChannel(fake.State)
+    const client = await acquireClient(executor)
+    client.pendingChannel = channel
+    const handle = await executor.start(connection(), { command: 'sleep 60', cwd: '/home/phys/workspace' })
+    handle.kill()
+    const result = await handle.done
+    expect(channel.killedSignals).toContain('KILL')
+    expect(result.signal).toBe('SIGKILL')
+  })
+
+  it('does not apply a foreground deadline; a deadliner is absent', async () => {
+    fake.State.autoSettle = false
+    fake.State.killSettles = false
+    const channel = new FakeChannel(fake.State)
+    const client = await acquireClient(executor)
+    client.pendingChannel = channel
+    const handle = await executor.start(connection(), { command: 'sleep 60', cwd: '/home/phys/workspace' })
+    // Without a timeout the handle stays live until killed; invoking kill closes it.
+    handle.kill()
+    expect(handle.stdout.total).toBe(0)
+  })
+
+  it('is idempotent when kill is invoked after the channel already closed', async () => {
+    const channel = new FakeChannel(fake.State)
+    const client = await acquireClient(executor)
+    client.pendingChannel = channel
+    const handle = await executor.start(connection(), { command: 'echo done', cwd: '/home/phys/workspace' })
+    // Wait for the channel to close on its own, then kill is a no-op guard.
+    await handle.done
+    handle.kill()
+    await handle.done
+    expect(channel.killedSignals).not.toContain('KILL')
+  })
+})
+
+describe('pooled connection liveness', () => {
+  it('marks the slot stale when the jump client errors after connect', async () => {
+    fake.State.sftp!.withFile('a.txt', 'hello')
+    await executor.readText(jumpConnection(), { path: 'a.txt', offset: 1, limit: 10 })
+    expect(fake.State.instances).toBe(2)
+    // The jump client is the first of the two clients (it connects before the target).
+    fake.State.clients[0]!.emit('error', new Error('jump keepalive lost'))
+    const again = await executor.readText(jumpConnection(), { path: 'a.txt', offset: 1, limit: 10 })
+    expect(again.lines[0]).toMatchObject({ number: 1, text: 'hello' })
+    expect(fake.State.instances).toBeGreaterThanOrEqual(4)
+  })
+})
+
+describe('detached stream tail', () => {
+  it('retains only the newest bytes and reports a lossy read once the window slides', async () => {
+    fake.State.autoSettle = false
+    const channel = new FakeChannel(fake.State)
+    const client = await acquireClient(executor)
+    client.pendingChannel = channel
+    // maxOutputBytes is 256 in this executor, so push well past it.
+    const handle = await executor.start(connection(), { command: 'echo', cwd: '/home/phys/workspace' })
+    const chunk = 'x'.repeat(200)
+    channel.stdout.emit('data', Buffer.from(chunk))
+    channel.stdout.emit('data', Buffer.from(chunk))
+    channel.stdout.emit('data', Buffer.from(chunk))
+    // 600 bytes total, but the 256-byte cap keeps only the last 200-byte chunk.
+    expect(handle.stdout.total).toBe(600)
+    // A read from the very start has slid out of the retained window: lossy.
+    const early = handle.stdout.readFrom(0)
+    expect(early.lossy).toBe(true)
+    expect(early.text.length).toBe(200)
+    // A read from a retained offset stays clean.
+    const retained = handle.stdout.readFrom(400)
+    expect(retained.lossy).toBe(false)
+    expect(retained.text.length).toBe(200)
+    channel.settle()
+    await handle.done
   })
 })
 

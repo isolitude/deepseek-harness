@@ -30,6 +30,9 @@
       "path": "../../credentials/credentials"
     },
     {
+      "path": "../../jobs/jobs"
+    },
+    {
       "path": "../remote"
     }
   ]

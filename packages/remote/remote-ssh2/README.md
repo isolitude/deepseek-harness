@@ -68,7 +68,7 @@ Strict by default: a connection must carry the expected SHA256 fingerprint of th
 
 ### Design philosophy
 
-- **One pooled client per identity.** Connections are keyed by a serialized identity (analysis id, host, port, user, auth kind/key path, and the jump host when present); reused while live and closed on idle timeout, on explicit `dispose()`, and on context teardown. A socket that closes underneath the pool is detected and rebuilt on the next call. A connection routed through a `proxyJump` hop holds both clients and tears the jump down (destroy the forward stream, end the hop) together with the target.
+- **One pooled client per identity.** Connections are keyed by a serialized identity (analysis id, host, port, user, auth kind/key path, and the jump host when present); reused while live and closed on idle timeout, on explicit `dispose()`, and on context teardown. A socket that closes underneath the pool — or that emits an `error` (such as a keepalive timeout when the peer is lost) — is absorbed, the slot marked stale, and rebuilt on the next call instead of crashing the process. A connection routed through a `proxyJump` hop holds both clients and tears the jump down (destroy the forward stream, end the hop) together with the target.
 - **Atomic remote writes.** Text writes and pushed files land in a temp sibling first and publish through an SFTP `rename`, so a failed transfer never leaves a partial file.
 - **Bounded everywhere.** Command output, text payloads, and transfers respect caps; overflow fails with `REMOTE_TOO_LARGE` rather than silently truncating.
 
@@ -81,6 +81,8 @@ Strict by default: a connection must carry the expected SHA256 fingerprint of th
 ### Command runs
 
 `run` spawns `bash -s` over the channel, streams bounded stdout/stderr, and reports the remote exit code, killing signal, and timeout truth. A non-zero exit is a result, not a failure.
+
+`start` launches a detached background run: it returns a streaming handle immediately and owns no deadline, so a caller (the `remote_exec` `run_in_background` path) can read incremental stdout/stderr and terminate it with `kill`. The pooled connection stays open for the whole background lifetime.
 
 ### Transfers
 

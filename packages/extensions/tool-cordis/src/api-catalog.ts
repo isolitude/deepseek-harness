@@ -1748,6 +1748,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'exit facts and bounded stdout/stderr.',
       },
       {
+        signature: 'abstract start(connection: RemoteConnection, request: RemoteRunRequest): Promise<RemoteRunHandle>',
+        description: 'Start a remote shell command and settle it detached, so the caller can read bounded incremental stdout/stderr and request termination before the command ends. A non-zero exit is a result, not a failure; the handle\'s `done` rejects only for infrastructure failures.',
+        parameters: [{ name: 'connection', description: 'resolved connection for this call.' }, { name: 'request', description: 'explicit command, cwd, and environment; the deadline is implied by the caller\'s own lifecycle (job kill, timeout).' }],
+        returns: 'the streaming handle for incremental reads and termination.',
+      },
+      {
         signature: 'abstract readText(connection: RemoteConnection, request: RemoteReadRequest): Promise<RemoteReadResult>',
         description: 'Read a bounded line-numbered window of a remote UTF-8 text file.',
         parameters: [{ name: 'connection', description: 'resolved connection for this call.' }, { name: 'request', description: 'remote path, 1-based offset, and line limit.' }],
@@ -5965,12 +5971,20 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface RemoteReadResult {\n    readonly path: string;\n    readonly lines: readonly RemoteReadLine[];\n    readonly totalLines: number;\n    readonly truncated: boolean;\n}',
   },
   {
+    name: 'RemoteRunHandle',
+    declaration: 'export interface RemoteRunHandle {\n    readonly stdout: RemoteRunStream;\n    readonly stderr: RemoteRunStream;\n    readonly done: Promise<RemoteRunResult>;\n    kill(reason?: string): void;\n}',
+  },
+  {
     name: 'RemoteRunRequest',
-    declaration: 'export interface RemoteRunRequest extends RemoteRequestBase {\n    readonly command: string;\n    readonly cwd: string;\n    readonly timeoutMs: number;\n    readonly env?: Readonly<Record<string, string>>;\n}',
+    declaration: 'export interface RemoteRunRequest extends RemoteRequestBase {\n    readonly command: string;\n    readonly cwd: string;\n    readonly timeoutMs?: number;\n    readonly env?: Readonly<Record<string, string>>;\n}',
   },
   {
     name: 'RemoteRunResult',
     declaration: 'export interface RemoteRunResult {\n    readonly exitCode: number | null;\n    readonly signal: string | null;\n    readonly stdout: string;\n    readonly stderr: string;\n    readonly timedOut: boolean;\n}',
+  },
+  {
+    name: 'RemoteRunStream',
+    declaration: 'export interface RemoteRunStream {\n    readFrom(fromByte: number): {\n        text: string;\n        nextOffset: number;\n        lossy: boolean;\n    };\n    readonly total: number;\n}',
   },
   {
     name: 'RemoteTransferResult',

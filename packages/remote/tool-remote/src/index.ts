@@ -69,7 +69,14 @@ export function apply(ctx: Context, config: Config): void {
   // Load the connection inside each execution so per-call session context and
   // freshly rotated credentials apply; never cache it at registration.
   const connectionLoader = loadRemoteConnection
-  applyExecTool(ctx, { connectionLoader, defaultTimeoutMs: resolved.timeoutMs, defaultWorkdir: resolved.workdir })
+  // The background surface follows the registry. `remote_exec` advertises and
+  // enforces `run_in_background` for as long as `ctx.jobs` is composed, and
+  // falls back to foreground-only otherwise, mirroring the shell tools.
+  applyExecTool(ctx, {
+    connectionLoader,
+    defaultTimeoutMs: resolved.timeoutMs,
+    defaultWorkdir: resolved.workdir,
+  }, ctx.get('jobs'))
   applyReadTool(ctx, { connectionLoader, defaultLimit: resolved.readLimit })
   applyWriteTool(ctx, { connectionLoader })
   applyEditTool(ctx, { connectionLoader })

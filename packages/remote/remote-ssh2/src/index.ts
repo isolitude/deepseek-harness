@@ -32,8 +32,10 @@ import type {
   RemotePushRequest,
   RemoteReadRequest,
   RemoteReadResult,
+  RemoteRunHandle,
   RemoteRunRequest,
   RemoteRunResult,
+  RemoteRunStream,
   RemoteTransferResult,
   RemoteWriteRequest,
   RemoteWriteResult,
@@ -366,6 +368,65 @@ function collectBounded(maxBytes: number): { write: (chunk: Buffer) => void; tex
   }
 }
 
+/**
+ * A bounded, incrementally readable stream tail for detached remote output.
+ * Bytes are retained up to `maxBytes`; once the retained window slides past a
+ * requested offset, the read is `lossy` (the caller renders the discontinuity
+ * rather than a silent splice). Decoding is incremental so a multibyte UTF-8
+ * sequence split across chunks recombines correctly.
+ */
+class StreamTail implements RemoteRunStream {
+  private readonly chunks: Buffer[] = []
+  private readonly maxBytes: number
+  private _total = 0
+  private readonly decoder = new TextDecoder('utf-8')
+
+  constructor(maxBytes: number) {
+    this.maxBytes = maxBytes
+  }
+
+  get total(): number {
+    return this._total
+  }
+
+  /** Append one raw chunk, dropping the oldest bytes beyond the retained window. */
+  push(chunk: Buffer): void {
+    if (chunk.byteLength === 0) return
+    this.chunks.push(chunk)
+    this._total += chunk.byteLength
+    this.trim()
+  }
+
+  /** Drop the oldest whole chunks until the retained bytes stay within the cap. */
+  private trim(): void {
+    let retained = 0
+    for (const part of this.chunks) retained += part.byteLength
+    while (retained > this.maxBytes && this.chunks.length > 1) {
+      const dropped = this.chunks.shift()
+      /* v8 ignore next 2 -- `chunks.length > 1` guarantees `shift()` yields a buffer, so the undefined arm is unreachable. */
+      if (dropped === undefined) break
+      retained -= dropped.byteLength
+    }
+  }
+
+  readFrom(fromByte: number): { text: string; nextOffset: number; lossy: boolean } {
+    let retained = 0
+    for (const part of this.chunks) retained += part.byteLength
+    const windowStart = this.total - retained
+    // Lossy only when the requested offset slid out of the retained window, so
+    // a consumer whose cursor reached `windowStart` reads the ring cleanly even
+    // after older bytes were dropped for the cap.
+    const lossy = fromByte < windowStart
+    const buffer = Buffer.concat(this.chunks)
+    const slice = lossy ? buffer : buffer.subarray(fromByte - windowStart)
+    return {
+      text: this.decoder.decode(slice),
+      nextOffset: this.total,
+      lossy,
+    }
+  }
+}
+
 /** Map a remote sftp error into typed failure codes. */
 function classifySftpError(cause: unknown, path: string): RemoteError {
   if (cause instanceof RemoteError) return cause
@@ -645,6 +706,15 @@ export class Ssh2RemoteExecutor extends RemoteExecutor {
     const { client, jump } = await connectClient(connection, this.opts)
     const pooled: PooledClient = { client, jump, sftp: undefined, idleTimer: undefined, fingerprint, closed: false }
     client.on('close', () => { pooled.closed = true })
+    // `connectOne` drops its connect-time `error` listener on `ready`, so a live
+    // client has none afterwards. ssh2 emits `error` on an established client
+    // when its keepalive detects a lost peer (`level: 'client-timeout'`), and an
+    // `error` event with no listener is an uncaught exception that crashes the
+    // process. Keep a listener for the client's whole life: absorb the error and
+    // mark the slot stale so the next call rebuilds the connection. The jump hop
+    // is the same tunnel's other half, so its failure also strands this slot.
+    client.on('error', () => { pooled.closed = true })
+    if (jump !== undefined) jump.client.on('error', () => { pooled.closed = true })
     this.pool.set(fingerprint, pooled)
     return pooled
   }
@@ -664,7 +734,10 @@ export class Ssh2RemoteExecutor extends RemoteExecutor {
     pooled.idleTimer.unref()
   }
 
-  override async run(connection: RemoteConnection, request: RemoteRunRequest): Promise<RemoteRunResult> {
+  /** Acquire the pooled client and open a `bash -s` channel for one run. */
+  private async openChannel(
+    connection: RemoteConnection,
+  ): Promise<{ pooled: PooledClient; channel: import('ssh2').ClientChannel }> {
     const pooled = await this.acquire(connection)
     const channel = await execChannel(pooled.client, 'bash -s').catch((cause: unknown) => {
       throw new RemoteError(
@@ -673,6 +746,18 @@ export class Ssh2RemoteExecutor extends RemoteExecutor {
         { cause },
       )
     })
+    return { pooled, channel }
+  }
+
+  override async run(connection: RemoteConnection, request: RemoteRunRequest): Promise<RemoteRunResult> {
+    // `run` owns the command deadline; `start` is the detached path that does
+    // not. A missing timeout here would make `setTimeout` fire immediately, so
+    // require a positive finite deadline rather than silently degrading.
+    const timeoutMs = request.timeoutMs
+    if (timeoutMs === undefined || !Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+      throw new RemoteError('remote run requires a positive finite timeoutMs', 'REMOTE_IO_ERROR')
+    }
+    const { pooled, channel } = await this.openChannel(connection)
     const stdout = collectBounded(this.opts.maxOutputBytes)
     const stderr = collectBounded(this.opts.maxOutputBytes)
     let exitCode: number | null = null
@@ -699,7 +784,7 @@ export class Ssh2RemoteExecutor extends RemoteExecutor {
         timedOut = true
         channel.signal('KILL')
         channel.close()
-      }, request.timeoutMs)
+      }, timeoutMs)
       // The timer is cleared on the settle path below.
       channel.on('close', () => { clearTimeout(timer) })
     })
@@ -721,6 +806,55 @@ export class Ssh2RemoteExecutor extends RemoteExecutor {
       stdout: stdout.text(),
       stderr: stderr.text(),
       timedOut,
+    }
+  }
+
+  override async start(connection: RemoteConnection, request: RemoteRunRequest): Promise<RemoteRunHandle> {
+    const { pooled, channel } = await this.openChannel(connection)
+    const stdout = new StreamTail(this.opts.maxOutputBytes)
+    const stderr = new StreamTail(this.opts.maxOutputBytes)
+    let exitCode: number | null = null
+    let signal: string | null = null
+    /* v8 ignore start -- ssh2 delivers Buffer chunks; string chunks are a defensive branch. */
+    channel.stdout.on('data', (chunk: string | Buffer) => { stdout.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)) })
+    channel.stderr.on('data', (chunk: string | Buffer) => { stderr.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)) })
+    /* v8 ignore stop */
+    const closing = trackClose(channel)
+    channel.on('exit', (code: number | null, sig: string | null) => {
+      exitCode = code
+      signal = sig ?? null
+    })
+    channel.write(`${request.command}\n`)
+    channel.end()
+    // Detached: no deadline timer. The caller owns termination via `kill`, and
+    // holds the pooled client open until the channel closes, so the connection
+    // stays alive for the whole background lifetime.
+    const done = (async (): Promise<RemoteRunResult> => {
+      try {
+        await closing.wait()
+      } finally {
+        this.release(pooled)
+      }
+      return {
+        exitCode,
+        signal,
+        stdout: stdout.readFrom(0).text,
+        stderr: stderr.readFrom(0).text,
+        timedOut: false,
+      }
+    })()
+    return {
+      stdout,
+      stderr,
+      done,
+      kill: () => {
+        // A kill before exit sends SIGKILL then force-closes the channel; the
+        // `close` event releases the pooled client and settles `done`.
+        if (!closing.isClosed()) {
+          channel.signal('KILL')
+          channel.close()
+        }
+      },
     }
   }
 

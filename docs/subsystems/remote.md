@@ -101,6 +101,18 @@ Abstract remote executor. One provider registers `ctx.remote` per composition; e
 abstract run(connection: RemoteConnection, request: RemoteRunRequest): Promise<RemoteRunResult>
 
 /**
+ * Start a remote shell command and settle it detached, so the caller can
+ * read bounded incremental stdout/stderr and request termination before the
+ * command ends. A non-zero exit is a result, not a failure; the handle's
+ * `done` rejects only for infrastructure failures.
+ * @param connection - resolved connection for this call.
+ * @param request - explicit command, cwd, and environment; the deadline is
+ *   implied by the caller's own lifecycle (job kill, timeout).
+ * @returns the streaming handle for incremental reads and termination.
+ */
+abstract start(connection: RemoteConnection, request: RemoteRunRequest): Promise<RemoteRunHandle>
+
+/**
  * Read a bounded line-numbered window of a remote UTF-8 text file.
  * @param connection - resolved connection for this call.
  * @param request - remote path, 1-based offset, and line limit.

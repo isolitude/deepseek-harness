@@ -35,7 +35,7 @@ A composition mounts one provider (currently `dsh-remote-ssh2`) and the tool pac
 <a id="related-documentation"></a>
 ## Related documentation
 
-- [Remote SSH tools plan](../../LLMPWA/documentation/ssh-remote-tools-plan.md) — the per-analysis composition design, decision points, and credential-storage guidance this family implements.
+- [SSH keepalive and `remote_exec` backgrounding](../../.agents/notes/implemented/feature/2026-09-12-ssh-keepalive-and-background-exec.md) — the keepalive default and the `run_in_background` job surface the family implements.
 - [Filesystem subsystem](../../docs/subsystems/filesystem.md) — the local filesystem seam the remote file tools complement.
 
 -----

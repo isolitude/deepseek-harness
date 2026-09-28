@@ -15,6 +15,7 @@ import type {
   RemotePushRequest,
   RemoteReadRequest,
   RemoteReadResult,
+  RemoteRunHandle,
   RemoteRunRequest,
   RemoteRunResult,
   RemoteTransferResult,
@@ -78,6 +79,10 @@ describe('RemoteExecutor service registration', () => {
   class Stub extends RemoteExecutor {
     run(_c: RemoteConnection, _r: RemoteRunRequest): Promise<RemoteRunResult> {
       return Promise.resolve({ exitCode: 0, signal: null, stdout: '', stderr: '', timedOut: false })
+    }
+
+    start(_c: RemoteConnection, _r: RemoteRunRequest): Promise<RemoteRunHandle> {
+      return Promise.reject(new RemoteError('detached start not implemented by this stub', 'REMOTE_IO_ERROR'))
     }
 
     readText(_c: RemoteConnection, _r: RemoteReadRequest): Promise<RemoteReadResult> {

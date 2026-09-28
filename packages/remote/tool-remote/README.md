@@ -64,7 +64,7 @@ The tool resolves `keyPath` relative to the analysis directory; `passwordRef` na
 
 | Tool | Arguments | Behavior |
 |---|---|---|
-| `remote_exec` | `command`, `workdir?`, `timeout_ms?` | Runs one remote shell command and waits for it; returns `{ exit_code, signal, stdout, stderr, timed_out }` |
+| `remote_exec` | `command`, `workdir?`, `timeout_ms?`, `run_in_background?` | Runs one remote shell command and waits for it; returns `{ exit_code, signal, stdout, stderr, timed_out }`. With `run_in_background: true` it registers a background job and returns `{ kind, job_id }` immediately. |
 | `remote_read` | `path`, `offset?`, `limit?` | Line-numbered remote text window with totals and truncation truth |
 | `remote_write` | `path`, `content` | Atomic create/replace of a remote UTF-8 text file |
 | `remote_edit` | `path`, `old_string`, `new_string`, `replace_all?` | One literal replacement, requiring a unique match unless `replace_all` |
@@ -84,7 +84,15 @@ Local paths resolve against the calling session's workspace; remote paths resolv
 
 ### Backgrounding a long-running command
 
-`remote_exec` runs a command to completion and returns only when the remote channel closes. To start a long job and not wait, background it on the remote shell, detach it from the tool's channel, and write output to a file:
+By default `remote_exec` runs a command to completion and returns only when the remote channel closes, so a long-running command can block the turn. When a background-job registry is composed, `remote_exec` advertises `run_in_background: true`: the command starts detached on the remote server and the call returns a `{ kind: 'background', job_id }` immediately, without waiting.
+
+```json
+{ "command": "python3 train.py", "run_in_background": true }
+```
+
+The call returns a job id right away. Read the streamed output with `job_output` and stop the job with `job_kill`; both are provided by the job controls (`dsh-tool-jobs`). The remote run owns its lifetime, so the pooled SSH connection stays open for the whole background duration.
+
+Without a composed job registry the tool stays foreground-only and omits the `run_in_background` parameter. If you cannot hang a long command on the turn and the registry is unavailable, fall back to detaching it on the remote shell and polling a log file:
 
 ```bash
 nohup python3 train.py > run.log 2>&1 &
@@ -133,7 +141,7 @@ Read these pages when the package-level contract is not enough.
 
 - [dsh-remote](../remote/README.md) — the `ctx.remote` seam the tools consume.
 - [dsh-remote-ssh2](../remote-ssh2/README.md) — the SSH2 provider that executes the operations.
-- [Remote SSH tools plan](../../../LLMPWA/documentation/ssh-remote-tools-plan.md) — the full per-analysis composition design, including credential storage.
+- [SSH keepalive and `remote_exec` backgrounding](../../../.agents/notes/implemented/feature/2026-09-12-ssh-keepalive-and-background-exec.md) — the keepalive default and the `run_in_background` surface `tool-remote` exposes.
 
 -----
 
@@ -178,11 +186,11 @@ Prefix-stable while visible tool definitions and order are unchanged.
 
 #### What the model sees
 
-`remote_exec` renders stdout, a `[stderr]` section when present, optional `[timed out]` / `[killed by signal: X]` markers, and a final `[exit code: N]` line; an unknown exit renders `[exit status unknown]`.
+`remote_exec` renders stdout, a `[stderr]` section when present, optional `[timed out]` / `[killed by signal: X]` markers, and a final `[exit code: N]` line; an unknown exit renders `[exit status unknown]`. A `run_in_background` call renders `started background job <id>` and defers the output to the job controls.
 
 #### Token effect
 
-Zero result tokens before a call; output is bounded per stream and retained until compaction.
+Zero result tokens before a call; output is bounded per stream and retained until compaction. A background call costs one short acknowledgement line.
 
 #### KV Cache effect
 
@@ -204,6 +212,7 @@ Append-only; results follow the reusable request prefix.
 
 ## Known Limitations and Deferred Work
 
+- **Backgrounding requires the job registry** — `remote_exec` exposes `run_in_background` only when `dsh-jobs`/`dsh-tool-jobs` are composed; without them the tool falls back to foreground-only.
 - **Single-file transfers** — `remote_push`/`remote_pull` handle one file per call; directory transfer combines `remote_exec` with `tar`.
 - **Configuration-driven hosts only** — the remote host comes from the analysis `.dsh/config.yml`; there is no per-call host override (a deliberate policy default).
 - **No inventory tool** — listing remote directories is left to `remote_exec`; the seam and tools address individual files.

@@ -159,6 +159,15 @@ describe('remote_exec', () => {
     const result = await harness.call('remote_exec', { command: '' })
     expect(result.isError).toBe(true)
   })
+
+  it('rejects run_in_background without a composed job registry', async () => {
+    await withConfig()
+    // This harness mounts no `ctx.jobs`, so the tool is foreground-only and
+    // must reject an explicit background request rather than silently run it.
+    const result = await harness.call('remote_exec', { command: 'ls', run_in_background: true })
+    expect(result.isError).toBe(true)
+    expect(text(result)).toContain('background jobs unavailable')
+  })
 })
 
 describe('remote_read', () => {

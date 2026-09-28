@@ -64,7 +64,7 @@ remote:
 
 | 工具 | 参数 | 行为 |
 |---|---|---|
-| `remote_exec` | `command`、`workdir?`、`timeout_ms?` | 运行一条远程 shell 命令并等待其结束；返回 `{ exit_code, signal, stdout, stderr, timed_out }` |
+| `remote_exec` | `command`、`workdir?`、`timeout_ms?`、`run_in_background?` | 运行一条远程 shell 命令并等待其结束；返回 `{ exit_code, signal, stdout, stderr, timed_out }`。用 `run_in_background: true` 时注册一个后台任务，并立即返回 `{ kind, job_id }`。 |
 | `remote_read` | `path`、`offset?`、`limit?` | 带行号的远程文本窗口、总数与截断真值 |
 | `remote_write` | `path`、`content` | 原子创建/替换远程 UTF-8 文本文件 |
 | `remote_edit` | `path`、`old_string`、`new_string`、`replace_all?` | 一次字面量替换；除非 `replace_all`，否则要求唯一匹配 |
@@ -84,7 +84,15 @@ remote:
 
 ### 后台运行长命令
 
-`remote_exec` 会把命令运行到完成，仅当远程通道关闭时才返回。要启动一个长任务且不等待，请在远程 shell 后台运行、把它从工具通道中分离，并把输出写入文件：
+默认情况下 `remote_exec` 会把命令运行到完成，仅当远程通道关闭时才返回，因此长命令会阻塞这一轮。当组合了后台任务注册表时，`remote_exec` 会暴露 `run_in_background: true`：命令在远程服务器上分离启动，并立即返回 `{ kind: 'background', job_id }`，无需等待。
+
+```json
+{ "command": "python3 train.py", "run_in_background": true }
+```
+
+该调用立即返回任务 id。用 `job_output` 读取流式输出、用 `job_kill` 停止任务；两者由任务控制项（`dsh-tool-jobs`）提供。远程运行自己掌握生命周期，因此在整个后台运行期间连接池的 SSH 连接保持打开。
+
+当没有组合任务注册表时，工具保持仅前台，并省略 `run_in_background` 参数。如果你无法在轮次上挂起长命令、且注册表不可用，则可以退回到远程 shell 分离并轮询日志文件：
 
 ```bash
 nohup python3 train.py > run.log 2>&1 &
@@ -133,7 +141,7 @@ echo $!
 
 - [dsh-remote](../remote/README.zh.md) — 工具消费的 `ctx.remote` 接缝。
 - [dsh-remote-ssh2](../remote-ssh2/README.zh.md) — 执行这些操作的 SSH2 后端。
-- [远程 SSH 工具计划](../../../LLMPWA/documentation/ssh-remote-tools-plan.md) — 完整的按 analysis 组合设计，包括凭据存储。
+- [SSH keepalive 与 `remote_exec` 后台化](../../../.agents/notes/implemented/feature/2026-09-12-ssh-keepalive-and-background-exec.zh.md) — `tool-remote` 暴露的 keepalive 默认与 `run_in_background` 面。
 
 -----
 
@@ -178,11 +186,11 @@ Use the remote_* tools to execute commands and transfer files on the analysis's 
 
 #### 模型看到什么
 
-`remote_exec` 渲染 stdout、存在时的 `[stderr]` 段、可选 `[timed out]`/`[killed by signal: X]` 标记，以及末尾 `[exit code: N]` 行；未知退出渲染 `[exit status unknown]`。
+`remote_exec` 渲染 stdout、存在时的 `[stderr]` 段、可选 `[timed out]`/`[killed by signal: X]` 标记，以及末尾 `[exit code: N]` 行；未知退出渲染 `[exit status unknown]`。`run_in_background` 调用渲染 `started background job <id>`，并把输出推迟到任务控制项。
 
 #### Token 影响
 
-调用前零结果 token；输出按流有界并保留到压缩。
+调用前零结果 token；输出按流有界并保留到压缩。一次后台调用只增加一行简短确认。
 
 #### KV 缓存影响
 
@@ -207,6 +215,7 @@ Use the remote_* tools to execute commands and transfer files on the analysis's 
 <a id="known-limitations-and-deferred-work"></a>
 
 - **单文件传输** — `remote_push`/`remote_pull` 每次调用处理一个文件；目录传输用 `remote_exec` 配合 `tar`。
+- **后台需要任务注册表** — 仅当组合了 `dsh-jobs`/`dsh-tool-jobs` 时，`remote_exec` 才暴露 `run_in_background`；否则工具退回仅前台。
 - **仅配置驱动的主机** — 远程主机来自 analysis `.dsh/config.yml`；没有逐调用主机覆盖（有意策略默认）。
 - **无清点工具** — 列出远程目录留给 `remote_exec`；接缝与工具定位单个文件。
 

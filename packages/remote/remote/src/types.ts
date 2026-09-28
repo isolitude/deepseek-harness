@@ -85,8 +85,12 @@ export interface RemoteRunRequest extends RemoteRequestBase {
   readonly command: string
   /** Remote working directory; relative paths resolve against the connection remoteRoot. */
   readonly cwd: string
-  /** Positive command deadline in milliseconds; expiry kills the remote process group. */
-  readonly timeoutMs: number
+  /**
+   * Command deadline in milliseconds; expiry kills the remote process group.
+   * Omitted only for a detached background run, whose lifetime the caller
+   * owns and whose termination is {@link RemoteRunHandle.kill}.
+   */
+  readonly timeoutMs?: number
   /** Explicit remote environment entries merged over the scrubbed remote base. */
   readonly env?: Readonly<Record<string, string>>
 }
@@ -103,6 +107,42 @@ export interface RemoteRunResult {
   readonly stderr: string
   /** True when the command deadline expired and the remote group was killed. */
   readonly timedOut: boolean
+}
+
+/** One non-consuming pull source over a remote command stream's captured bytes. */
+export interface RemoteRunStream {
+  /**
+   * Read everything the stream captured since `fromByte` without consuming it.
+   * @param fromByte - whole-stream offset to resume from (a prior read's `nextOffset`; 0 for the first read).
+   * @returns the delta text, the offset for the next read, and whether the requested offset slid out of the retained window.
+   */
+  readFrom(fromByte: number): { text: string; nextOffset: number; lossy: boolean }
+  /** Whole-stream total bytes captured so far. */
+  readonly total: number
+}
+
+/**
+ * Streaming handle for a detached remote command. `run` buffers and settles at
+ * process exit; `start` hands back this handle so a caller (the job tool layer)
+ * can pump bounded incremental stdout/stderr into its own output ring, await
+ * settlement, and request termination.
+ */
+export interface RemoteRunHandle {
+  /** Pull source for the remote stdout. */
+  readonly stdout: RemoteRunStream
+  /** Pull source for the remote stderr. */
+  readonly stderr: RemoteRunStream
+  /**
+   * Settles with the final exit facts once the remote command ends (exit,
+   * signal, or a kill). Never rejects for a non-zero exit; rejects only for
+   * infrastructure failure.
+   */
+  readonly done: Promise<RemoteRunResult>
+  /**
+   * Request the remote command terminate. Settles `done` as killed; idempotent.
+   * @param reason - optional reason forwarded for diagnostics.
+   */
+  kill(reason?: string): void
 }
 
 /** One remote text read request. */

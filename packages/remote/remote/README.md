@@ -32,7 +32,7 @@ Pick `dsh-remote-ssh2` for SSH execution. Mounting a backend populates `ctx.remo
 
 ### What the service lets you do
 
-Through `ctx.remote` you can run one remote shell command with bounded output (`run`), read a bounded line-numbered window of a remote UTF-8 text file (`readText`), atomically create or replace a file (`writeText`), apply one literal edit (`editText`), and stream one file in either direction over SFTP (`push` / `pull`). Every operation takes the resolved connection; failures are typed `RemoteError`s carrying a stable code such as `REMOTE_AUTH_FAILED`, `REMOTE_HOST_KEY_MISMATCH`, `REMOTE_NOT_FOUND`, or `REMOTE_TOO_LARGE`, so callers branch on the code, never on message text. A connection may also carry a `proxyJump` hop (an SSH jump/bastion host) that the provider tunnels through before reaching the target; the hop is a `RemoteJumpHost` with its own `RemoteAuth` and host-key pin.
+Through `ctx.remote` you can run one remote shell command with bounded output (`run`), launch a detached background run that streams incremental output and owns no deadline (`start`), read a bounded line-numbered window of a remote UTF-8 text file (`readText`), atomically create or replace a file (`writeText`), apply one literal edit (`editText`), and stream one file in either direction over SFTP (`push` / `pull`). Every operation takes the resolved connection; failures are typed `RemoteError`s carrying a stable code such as `REMOTE_AUTH_FAILED`, `REMOTE_HOST_KEY_MISMATCH`, `REMOTE_NOT_FOUND`, or `REMOTE_TOO_LARGE`, so callers branch on the code, never on message text. A connection may also carry a `proxyJump` hop (an SSH jump/bastion host) that the provider tunnels through before reaching the target; the hop is a `RemoteJumpHost` with its own `RemoteAuth` and host-key pin.
 
 -----
 
@@ -71,7 +71,7 @@ Read these pages when the package-level contract is not enough. They move from t
 
 - [dsh-remote-ssh2](../remote-ssh2/README.md) — the SSH2 provider implementing this contract.
 - [dsh-tool-remote](../tool-remote/README.md) — the model-facing `remote_*` tools that consume `ctx.remote`.
-- [Remote SSH tools plan](../../../LLMPWA/documentation/ssh-remote-tools-plan.md) — the per-analysis `.dsh` composition design this seam was built for.
+- [SSH keepalive and `remote_exec` backgrounding](../../../.agents/notes/implemented/feature/2026-09-12-ssh-keepalive-and-background-exec.md) — the keepalive default and the detached `start` contract this seam exposes.
 
 -----
 

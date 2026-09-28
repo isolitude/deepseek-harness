@@ -28,8 +28,10 @@ import type {
   RemotePushRequest,
   RemoteReadRequest,
   RemoteReadResult,
+  RemoteRunHandle,
   RemoteRunRequest,
   RemoteRunResult,
+  RemoteRunStream,
   RemoteTransferResult,
   RemoteWriteRequest,
   RemoteWriteResult,
@@ -39,12 +41,17 @@ import * as ToolSsh from '@deepseek-ai/dsh-tool-remote'
 
 export interface FakeCalls {
   runs: Array<{ connection: RemoteConnection; request: RemoteRunRequest }>
+  starts: Array<{ connection: RemoteConnection; request: RemoteRunRequest }>
   reads: Array<{ connection: RemoteConnection; request: RemoteReadRequest }>
   writes: Array<{ connection: RemoteConnection; request: RemoteWriteRequest }>
   edits: Array<{ connection: RemoteConnection; request: RemoteEditRequest }>
   pushes: Array<{ connection: RemoteConnection; request: RemotePushRequest }>
   pulls: Array<{ connection: RemoteConnection; request: RemotePullRequest }>
   nextRun: RemoteRunResult
+  nextStart: () => RemoteRunHandle
+  nextStartReject?: unknown
+  /** When set, `start` holds the returned handle until this gate resolves. */
+  startGate?: Promise<void>
   nextRead: RemoteReadResult
   nextWrite: RemoteWriteResult
   nextEdit: RemoteEditResult
@@ -55,18 +62,76 @@ export interface FakeCalls {
 function defaultCalls(): FakeCalls {
   return {
     runs: [],
+    starts: [],
     reads: [],
     writes: [],
     edits: [],
     pushes: [],
     pulls: [],
     nextRun: { exitCode: 0, signal: null, stdout: '', stderr: '', timedOut: false },
+    nextStart: () => stubRunHandle(),
     nextRead: { path: 'f', lines: [], totalLines: 0, truncated: false },
     nextWrite: { path: 'f', created: true },
     nextEdit: { path: 'f', occurrences: 1 },
     nextTransfer: { localPath: 'l', remotePath: 'r', bytes: 0 },
     throwError: undefined,
   }
+}
+
+/** A minimal in-memory {@link RemoteRunStream} tail for the fake handle. */
+class FakeStream implements RemoteRunStream {
+  private text = ''
+  get total(): number {
+    return Buffer.byteLength(this.text)
+  }
+  write(chunk: string): void {
+    this.text += chunk
+  }
+  readFrom(fromByte: number): { text: string; nextOffset: number; lossy: boolean } {
+    const bytes = Buffer.from(this.text)
+    const slice = fromByte >= bytes.length ? '' : bytes.subarray(fromByte).toString('utf8')
+    return { text: slice, nextOffset: bytes.length, lossy: false }
+  }
+}
+export type { FakeStream }
+
+/** A controllable detached-run handle the tests can settle or kill on demand. */
+export function stubRunHandle(): RemoteRunHandle {
+  return stubRunHandleDetail().handle
+}
+
+/** A detached handle whose `done` already settles with a normal run result. */
+export function stubSettledHandle(
+  exitCode: number | null = 0,
+  signal: string | null = null,
+): RemoteRunHandle {
+  const { handle, stdout, stderr } = stubRunHandleDetail()
+  stdout.write('done')
+  return {
+    ...handle,
+    done: Promise.resolve({
+      exitCode,
+      signal,
+      stdout: stdout.readFrom(0).text,
+      stderr: stderr.readFrom(0).text,
+      timedOut: false,
+    }),
+  }
+}
+
+/** A controllable detached handle with its live streams exposed for writes. */
+export function stubRunHandleDetail(): {
+  handle: RemoteRunHandle
+  stdout: FakeStream
+  stderr: FakeStream
+} {
+  const stdout = new FakeStream()
+  const stderr = new FakeStream()
+  let kill: (() => void) | undefined
+  const done = new Promise<RemoteRunResult>((resolve) => {
+    kill = () => { resolve({ exitCode: 0, signal: 'SIGKILL' as const, stdout: stdout.readFrom(0).text, stderr: stderr.readFrom(0).text, timedOut: false }) }
+  })
+  return { handle: { stdout, stderr, done, kill: () => kill?.() }, stdout, stderr }
 }
 
 /** A scripted remote executor that records every delegated call. */
@@ -89,6 +154,21 @@ export class FakeRemoteExecutor extends RemoteExecutor {
   override run(connection: RemoteConnection, request: RemoteRunRequest): Promise<RemoteRunResult> {
     this.calls.runs.push({ connection, request })
     return this.maybe(this.calls.nextRun)
+  }
+
+  override async start(connection: RemoteConnection, request: RemoteRunRequest): Promise<RemoteRunHandle> {
+    this.calls.starts.push({ connection, request })
+    if (this.calls.nextStartReject !== undefined) {
+      // Reject with the raw value so the tool's `String(error)` normalization
+      // is exercised for a non-Error producer failure.
+      throw this.calls.nextStartReject
+    }
+    if (this.calls.throwError !== undefined) {
+      const cause = this.calls.throwError
+      throw cause instanceof Error ? cause : new Error(JSON.stringify(cause))
+    }
+    if (this.calls.startGate !== undefined) await this.calls.startGate
+    return this.calls.nextStart()
   }
 
   override readText(connection: RemoteConnection, request: RemoteReadRequest): Promise<RemoteReadResult> {

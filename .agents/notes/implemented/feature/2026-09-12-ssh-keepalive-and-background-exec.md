@@ -16,7 +16,7 @@ Separately, `remote_exec` runs a command to completion and returns only when the
 
 This is global: no per-host setup and no `~/.ssh/config` dependency, because the values ride the programmatic connect config that ssh2 already sends. The provider still does not read `~/.ssh/config`; the keepalive default replaces the common reason users reached for it.
 
-`remote_exec` still has no `run_in_background` argument. The documented pattern for a long job is to background it on the remote shell and detach it from the tool channel — `nohup <cmd> > run.log 2>&1 & echo $!` — which returns the background PID immediately while the job keeps running, then poll or fetch the log with later `remote_exec`/`remote_pull` calls. Backgrounding is a remote-shell behavior, not a tool contract; keepalive keeps the pooled connection alive across those later calls.
+`remote_exec` now has a `run_in_background` argument for jobs that must outlive one call. When a job registry (`ctx.jobs`) is composed, setting `run_in_background: true` returns a job id immediately; the tool starts the command detached inside the registry's starter, and the caller reads incremental output with `job_output` and stops it with `job_kill`. Without a registry the argument is unavailable and the tool stays foreground-only. A background job owns its own lifetime — no tool `timeoutMs` applies — and `ctx.jobs` cancellation routes to the remote run's `kill`. For a long job that should run independent of the session, the remote-shell detach pattern (`nohup <cmd> > run.log 2>&1 & echo $!`, then poll with later `remote_exec`/`remote_pull` calls) remains available; keepalive keeps the pooled connection alive across those later calls.
 
 ## Verification
 
@@ -27,7 +27,7 @@ This is global: no per-host setup and no `~/.ssh/config` dependency, because the
 
 **Read `~/.ssh/config` in the provider.** Rejected: it would add a user-configurable file dependency and platform-specific parsing for behavior the programmatic config already expresses without setup.
 
-**Add a `run_in_background` argument to `remote_exec`.** Rejected: it would change the tool schema, the model-facing guidance, and the run/transfer contract for behavior that the remote shell already provides. The documented `nohup ... & echo $!` pattern keeps the tool contract unchanged.
+**Let the tool buffer everything and return only on completion.** Rejected: it leaves an agent blocked on a job that could run hours, with no intermediate output. Backgrounding behind a job registry keeps the foreground contract (`run` settles once) while giving a long-running command a first-class handle the agent can poll and kill — instead of forcing a remote-shell `nohup` detach that leaves the output unmanageable.
 
 **Enable keepalive only when configured.** Rejected: it would not fix the default (no-setup) case and would reintroduce the silent-drop failure for the majority of deployments.
 
@@ -35,4 +35,4 @@ This is global: no per-host setup and no `~/.ssh/config` dependency, because the
 
 - Every pooled connection and jump hop now sends SSH keepalive and drops after 3 unanswered packets, so idle-swept or NAT'd connections stay up across the default 60 s idle reuse window without per-host config.
 - Connections behind a server that drops keepalive, or on a high-latency link, can now be terminated by the keepalive counter instead of by the server's own idle sweep; operators can tune `keepaliveIntervalMs`/`keepaliveCountMax` or set `keepaliveIntervalMs: 0` to restore the previous behavior.
-- `remote_exec` still waits for completion; backgrounded jobs are started and polled via the documented shell pattern.
+- `remote_exec` waits for completion by default; with a job registry composed it also offers `run_in_background`, so a long job can be started detached, read incrementally, and killed. The remote-shell `nohup` detach pattern stays available for jobs that must outlive the session.

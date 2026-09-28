@@ -32,7 +32,7 @@ kind: "package-reference"
 
 ### 服务能做什么
 
-通过 `ctx.remote` 你可以运行一条远程 shell 命令并获得有界输出（`run`），读取远程 UTF-8 文本文件的有界行号窗口（`readText`），原子创建或替换文件（`writeText`），应用一次字面量编辑（`editText`），并经 SFTP 双向流式传输单个文件（`push` / `pull`）。每个操作都接收解析后的连接；失败是带稳定代码（如 `REMOTE_AUTH_FAILED`、`REMOTE_HOST_KEY_MISMATCH`、`REMOTE_NOT_FOUND`、`REMOTE_TOO_LARGE`）的 `RemoteError`，调用方按代码分支，而不是解析消息文本。连接还可携带一个 `proxyJump` 跳板（SSH 跳板/bastion 主机），后端在到达目标前先经其隧道转发；该跳板是带自身 `RemoteAuth` 与主机密钥固定的 `RemoteJumpHost`。
+通过 `ctx.remote` 你可以运行一条远程 shell 命令并获得有界输出（`run`），启动一个流式输出增量、不拥有期限的分离后台运行（`start`），读取远程 UTF-8 文本文件的有界行号窗口（`readText`），原子创建或替换文件（`writeText`），应用一次字面量编辑（`editText`），并经 SFTP 双向流式传输单个文件（`push` / `pull`）。每个操作都接收解析后的连接；失败是带稳定代码（如 `REMOTE_AUTH_FAILED`、`REMOTE_HOST_KEY_MISMATCH`、`REMOTE_NOT_FOUND`、`REMOTE_TOO_LARGE`）的 `RemoteError`，调用方按代码分支，而不是解析消息文本。连接还可携带一个 `proxyJump` 跳板（SSH 跳板/bastion 主机），后端在到达目标前先经其隧道转发；该跳板是带自身 `RemoteAuth` 与主机密钥固定的 `RemoteJumpHost`。
 
 -----
 
@@ -71,7 +71,7 @@ kind: "package-reference"
 
 - [dsh-remote-ssh2](../remote-ssh2/README.zh.md) — 实现本约定的 SSH2 后端。
 - [dsh-tool-remote](../tool-remote/README.zh.md) — 消费 `ctx.remote` 的模型可见 `remote_*` 工具。
-- [远程 SSH 工具计划](../../../LLMPWA/documentation/ssh-remote-tools-plan.md) — 本接缝为之构建的按 analysis `.dsh` 组合设计。
+- [SSH keepalive 与 `remote_exec` 后台化](../../../.agents/notes/implemented/feature/2026-09-12-ssh-keepalive-and-background-exec.zh.md) — 本接缝暴露的 keepalive 默认与分离 `start` 契约。
 
 -----
 
