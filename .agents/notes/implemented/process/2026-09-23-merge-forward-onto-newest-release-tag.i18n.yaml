@@ -1,6 +1,19 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-23-merge-forward-onto-newest-release-tag.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/process/2026-09-23-merge-forward-onto-newest-release-tag.md
-2026-09-23-merge-forward-onto-newest-release-tag.md: 946c74f3d1d2a71e011626481db264dc76904704
-2026-09-23-merge-forward-onto-newest-release-tag.zh.md: 66467455315f76358be899cd5e68ed163cc2017b
+/agent-note-merge-feature-branches-onto-the-newest-release-tag:
+  en: dca51cbab2ee9732
+  zh: 735f42024b37d3c8
+/agent-note-merge-feature-branches-onto-the-newest-release-tag/problem:
+  en: 34817a0fdce5cc8a
+  zh: d52b2062674bbc14
+/agent-note-merge-feature-branches-onto-the-newest-release-tag/decision:
+  en: 2e4f6bde903f0063
+  zh: 701b0438154927c3
+/agent-note-merge-feature-branches-onto-the-newest-release-tag/alternatives-considered:
+  en: f02ba77d571e4e00
+  zh: 4d21f02478a32fd1
+/agent-note-merge-feature-branches-onto-the-newest-release-tag/consequences:
+  en: 35fd672c7d686bc4
+  zh: 7ecc0267470dbfb9

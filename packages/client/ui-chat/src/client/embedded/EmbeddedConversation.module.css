@@ -7,6 +7,11 @@
   min-height: 0;
   height: 100%;
   gap: 8px;
+  /* The transcript scrolls inside an elevated-painted surface, so its
+     scrollbar draws the l2 thumb (ui-theme styles/scrollbar.css rebinding
+     contract). */
+  --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
+  --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
 }
 
 .transcript {
@@ -91,7 +96,8 @@
 }
 
 .textarea:focus-visible {
-  outline: 2px solid var(--dsw-alias-border-l4);
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 2px;
 }
 
 .send {

@@ -1,6 +1,22 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-11-ssh-proxyjump.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-11-ssh-proxyjump.md
-2026-09-11-ssh-proxyjump.md: b235b2e28e046bb47d49112997cfa5a06a4524a3
-2026-09-11-ssh-proxyjump.zh.md: 036ca41396494f8204149ed717b04057a327fc89
+/agent-note-ssh-remote-tools-tunnel-through-a-proxyjump-host:
+  en: 2df10db978e8e372
+  zh: 4626bc0c69ce4dbb
+/agent-note-ssh-remote-tools-tunnel-through-a-proxyjump-host/problem:
+  en: ac3f1354cfab17fc
+  zh: 2164295e592b32de
+/agent-note-ssh-remote-tools-tunnel-through-a-proxyjump-host/decision:
+  en: 946439e8d1aa6878
+  zh: 0d8c53f70b390ffa
+/agent-note-ssh-remote-tools-tunnel-through-a-proxyjump-host/verification:
+  en: e65d8192a72f5045
+  zh: 33965227ed83fe24
+/agent-note-ssh-remote-tools-tunnel-through-a-proxyjump-host/alternatives-considered:
+  en: 1b0271fad2d68a11
+  zh: 346068ba07fb5a7e
+/agent-note-ssh-remote-tools-tunnel-through-a-proxyjump-host/consequences:
+  en: 975e5d2eb08e9cdf
+  zh: 5d7f108909d04c0e

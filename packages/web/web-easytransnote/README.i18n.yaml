@@ -1,6 +1,61 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/web/web-easytransnote/README.md
-README.md: ef7df4e50df4eff5a2e1b229f170c754290e2680
-README.zh.md: 800729123387edfabe9cc552532b364831dcca22
+/:
+  en: ea78adc93ddfae2d
+  zh: 4479785e8be5685b
+/deepseek-ai-dsh-web-easytransnote:
+  en: c85628cac1d60cc4
+  zh: 563123178568952b
+/deepseek-ai-dsh-web-easytransnote/summary:
+  en: 19a2e004387f61e3
+  zh: f5c07e7a45945b37
+/deepseek-ai-dsh-web-easytransnote/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: 09388d293f9be9cb
+/deepseek-ai-dsh-web-easytransnote/use-this-package:
+  en: 383f9db31f4763d7
+  zh: ab698df30a1e2c44
+/deepseek-ai-dsh-web-easytransnote/use-this-package/when-to-choose-it:
+  en: 760e68014785d980
+  zh: d8f77ff5f3f770d6
+/deepseek-ai-dsh-web-easytransnote/use-this-package/minimal-configuration:
+  en: 4d0f7794e2ad00d3
+  zh: b6bd3c5f44d11706
+/deepseek-ai-dsh-web-easytransnote/use-this-package/what-a-search-returns:
+  en: 6618b66b5f75b2df
+  zh: 93582e1826b3d446
+/deepseek-ai-dsh-web-easytransnote/use-this-package/what-a-fetch-returns:
+  en: a976d1af6a9eaf82
+  zh: e73c398e362826d1
+/deepseek-ai-dsh-web-easytransnote/use-this-package/failures-and-recovery:
+  en: 3d01de63648146ba
+  zh: b9e168739876f4de
+/deepseek-ai-dsh-web-easytransnote/understand-the-implementation:
+  en: 7010601542a84afe
+  zh: e30990cd6b8923f4
+/deepseek-ai-dsh-web-easytransnote/understand-the-implementation/design-philosophy:
+  en: 0a21e3ec18f9ae26
+  zh: 6270d103524d8d78
+/deepseek-ai-dsh-web-easytransnote/understand-the-implementation/source-map:
+  en: af76561fdec544dd
+  zh: 2b1039a9cd2d244d
+/deepseek-ai-dsh-web-easytransnote/understand-the-implementation/request-flow:
+  en: e2d3238bda3655b1
+  zh: 047fd3c73d205344
+/deepseek-ai-dsh-web-easytransnote/further-exploration:
+  en: 1da7c71b1bd542e1
+  zh: e9077a260480ec1e
+/deepseek-ai-dsh-web-easytransnote/model-experience:
+  en: 53fcc48bcb317941
+  zh: 54216edfa4abe2ce
+/deepseek-ai-dsh-web-easytransnote/model-experience/kv-cache-effect:
+  en: 94025b7ef45a397f
+  zh: 18b85a9d7fc141ee
+/deepseek-ai-dsh-web-easytransnote/known-limitations-and-deferred-work:
+  en: 041444b20b82f49e
+  zh: 4b37d3400156cb0d
+/deepseek-ai-dsh-web-easytransnote/known-limitations-and-deferred-work/dev-note:
+  en: e67f633dc6fe7773
+  zh: 8ec3e73528ddb1a6

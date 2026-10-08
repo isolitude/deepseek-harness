@@ -1,6 +1,22 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-09-bounded-live-conversation-in-session-slot.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-09-09-bounded-live-conversation-in-session-slot.md
-2026-09-09-bounded-live-conversation-in-session-slot.md: acbab9204de935498beecc5da91690b1d663ad8a
-2026-09-09-bounded-live-conversation-in-session-slot.zh.md: 629c86f17fca1ecab32e7089f2ff037ac4eb1881
+/agent-note-bounded-live-conversation-embedded-in-a-session-slot:
+  en: 8899b372f07aa6ed
+  zh: 21f04152f86c58f9
+/agent-note-bounded-live-conversation-embedded-in-a-session-slot/problem:
+  en: 047602c105def5f7
+  zh: b220f3c73462b268
+/agent-note-bounded-live-conversation-embedded-in-a-session-slot/decision:
+  en: 9d2ee15d9050ce14
+  zh: f312583845d46796
+/agent-note-bounded-live-conversation-embedded-in-a-session-slot/alternatives-considered:
+  en: 71bdc196d2a3fc9e
+  zh: c4f0a4c3b0e39502
+/agent-note-bounded-live-conversation-embedded-in-a-session-slot/consequences:
+  en: 8d4b8486964102e5
+  zh: b335bdd3b74a9b1c
+/agent-note-bounded-live-conversation-embedded-in-a-session-slot/verification:
+  en: aa3bf4d260bcb7d6
+  zh: 57feb724a50b8db1

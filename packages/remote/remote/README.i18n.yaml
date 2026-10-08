@@ -1,6 +1,52 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/remote/remote/README.md
-README.md: 6cc59ccf60dfd8f8ca6fe5f41dee101875a73a52
-README.zh.md: e109725705e3bfa2a81d7975aa93d363f3bfa209
+/:
+  en: d090aab41252fc92
+  zh: abcc02b8ef00c9f8
+/deepseek-ai-dsh-remote:
+  en: fd8db200160c0888
+  zh: 8a0b4a2bff3ae248
+/deepseek-ai-dsh-remote/summary:
+  en: c9ccd1c1dd77a222
+  zh: f14d630ea7cbf7a7
+/deepseek-ai-dsh-remote/table-of-contents:
+  en: b563e4ec4727d0de
+  zh: 44ebe7ceeda3dff6
+/deepseek-ai-dsh-remote/use-this-package:
+  en: eb28b6f2f0cd950c
+  zh: 3894225d8d29c194
+/deepseek-ai-dsh-remote/use-this-package/choosing-and-mounting-a-backend:
+  en: c9fad8bb826c4cbf
+  zh: c372138dc39a4b86
+/deepseek-ai-dsh-remote/use-this-package/what-the-service-lets-you-do:
+  en: 95d6c8e97bff049c
+  zh: c8afe708243b83e2
+/deepseek-ai-dsh-remote/understand-the-implementation:
+  en: 42b15ac6321706aa
+  zh: cfcb757213648bd9
+/deepseek-ai-dsh-remote/understand-the-implementation/design-philosophy:
+  en: 84927e8059bf90a1
+  zh: 3da91943675b2733
+/deepseek-ai-dsh-remote/understand-the-implementation/source-map:
+  en: 2e410804bac1ad1b
+  zh: 85aa56affebf90bd
+/deepseek-ai-dsh-remote/understand-the-implementation/how-a-call-flows:
+  en: 681cb8ee59f5b4c3
+  zh: b79b2885bffbbfd5
+/deepseek-ai-dsh-remote/further-exploration:
+  en: 8e8484b9b5ea4158
+  zh: 8eac19fe1f3cdb87
+/deepseek-ai-dsh-remote/model-experience:
+  en: d364b2916695e186
+  zh: fd1c145c77a19e79
+/deepseek-ai-dsh-remote/model-experience/kv-cache-effect:
+  en: aa0d1fc9f4aeb0c8
+  zh: b015a2dc8266f98c
+/deepseek-ai-dsh-remote/known-limitations-and-deferred-work:
+  en: b168828850e360b6
+  zh: aa1951a698821be0
+/deepseek-ai-dsh-remote/known-limitations-and-deferred-work/dev-note:
+  en: e67f633dc6fe7773
+  zh: 8ec3e73528ddb1a6

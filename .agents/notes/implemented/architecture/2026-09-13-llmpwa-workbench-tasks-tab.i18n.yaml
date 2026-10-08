@@ -1,6 +1,22 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-13-llmpwa-workbench-tasks-tab.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-09-13-llmpwa-workbench-tasks-tab.md
-2026-09-13-llmpwa-workbench-tasks-tab.md: c4932b27bac593435ae77baf164c5417dac0bda3
-2026-09-13-llmpwa-workbench-tasks-tab.zh.md: 0ede68e42f948d242462e587da0735070cdac1c0
+/agent-note-llmpwa-workbench-fit-task-records-tab:
+  en: 3501577c298691e3
+  zh: 51d64bc7b68f6f05
+/agent-note-llmpwa-workbench-fit-task-records-tab/problem:
+  en: 65a5189afdf625fc
+  zh: fe560987a68d45e1
+/agent-note-llmpwa-workbench-fit-task-records-tab/decision:
+  en: 3d781632f63e2640
+  zh: 0f489c8f7c5be51e
+/agent-note-llmpwa-workbench-fit-task-records-tab/alternatives-considered:
+  en: cac4dd428cc59275
+  zh: 177ee25e52bb4f88
+/agent-note-llmpwa-workbench-fit-task-records-tab/consequences:
+  en: 21d9a53720f61944
+  zh: 0ce60237c79569c2
+/agent-note-llmpwa-workbench-fit-task-records-tab/verification:
+  en: 3f9395ee4800b491
+  zh: 5fb6ba4bac80cf87

@@ -1,6 +1,52 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/client/ui-llmpwa-pipeline/README.md
-README.md: 7524bbdfe07f0c9a8bde64559a3d1ef64faefbc0
-README.zh.md: 5f00f065efb58f3e4c6f9f0864425bc96909cd18
+/:
+  en: 4daa3f696a5192c7
+  zh: 079416de22291323
+/deepseek-ai-dsh-client-ui-llmpwa-pipeline:
+  en: 1e923c5e8604d505
+  zh: 0922566ca6e332f6
+/deepseek-ai-dsh-client-ui-llmpwa-pipeline/summary:
+  en: 79a9ba8df61fa399
+  zh: 885136b47594b6d5
+/deepseek-ai-dsh-client-ui-llmpwa-pipeline/table-of-contents:
+  en: b563e4ec4727d0de
+  zh: 44ebe7ceeda3dff6
+/deepseek-ai-dsh-client-ui-llmpwa-pipeline/use-this-package:
+  en: bf2a331d54a3f0af
+  zh: 3fd21f05787a155c
+/deepseek-ai-dsh-client-ui-llmpwa-pipeline/use-this-package/the-workbench-panel:
+  en: 35766257604d89f2
+  zh: a586691f331e7e51
+/deepseek-ai-dsh-client-ui-llmpwa-pipeline/understand-the-implementation:
+  en: 4f04c9c911362f9e
+  zh: cfcb757213648bd9
+/deepseek-ai-dsh-client-ui-llmpwa-pipeline/understand-the-implementation/design:
+  en: 8bf65e6d525b6e5f
+  zh: 68da87e50fc985e1
+/deepseek-ai-dsh-client-ui-llmpwa-pipeline/understand-the-implementation/source-map:
+  en: 5fdba9389c38d7f5
+  zh: ac25b1c6848b6445
+/deepseek-ai-dsh-client-ui-llmpwa-pipeline/understand-the-implementation/agent-session-mapping:
+  en: 94464edeee7f3e5d
+  zh: 9f90879855219116
+/deepseek-ai-dsh-client-ui-llmpwa-pipeline/understand-the-implementation/fit-task-records:
+  en: 673a7d78979b440c
+  zh: 207f2cae8891a5ea
+/deepseek-ai-dsh-client-ui-llmpwa-pipeline/further-exploration:
+  en: e5a6e0ba5e34c2e0
+  zh: b7e39998ea898bf9
+/deepseek-ai-dsh-client-ui-llmpwa-pipeline/model-experience:
+  en: 2ec938ba3a75c414
+  zh: c9b52c5ec065662f
+/deepseek-ai-dsh-client-ui-llmpwa-pipeline/model-experience/kv-cache-effect:
+  en: be2f57092bda2d10
+  zh: 0018108cbc808c4a
+/deepseek-ai-dsh-client-ui-llmpwa-pipeline/known-limitations-and-deferred-work:
+  en: 6f9d43dcf62920a3
+  zh: 674673f23ca00639
+/deepseek-ai-dsh-client-ui-llmpwa-pipeline/known-limitations-and-deferred-work/dev-note:
+  en: 1fc5dc6f2c40fd2f
+  zh: 8ec3e73528ddb1a6

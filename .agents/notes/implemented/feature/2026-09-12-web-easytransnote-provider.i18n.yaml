@@ -1,6 +1,22 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-12-web-easytransnote-provider.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-12-web-easytransnote-provider.md
-2026-09-12-web-easytransnote-provider.md: 7edce7727d7bbf2d9e8ac18c8c1a39e08a9274f2
-2026-09-12-web-easytransnote-provider.zh.md: 0912ed92ff3f38fdf950da5cb5970eb921b7edf0
+/agent-note-easytransnote-backed-web-search-and-fetch-provider:
+  en: 9912654623461f58
+  zh: 0b7fd77cbe1719c0
+/agent-note-easytransnote-backed-web-search-and-fetch-provider/problem:
+  en: a3c1e6ed1a4182b7
+  zh: d298e2a812690e37
+/agent-note-easytransnote-backed-web-search-and-fetch-provider/decision:
+  en: 0e56c61769f6f2cd
+  zh: 0f57d73a59e2dcbf
+/agent-note-easytransnote-backed-web-search-and-fetch-provider/verification:
+  en: 1e9efd23f37689cf
+  zh: 77d4c29770691ad5
+/agent-note-easytransnote-backed-web-search-and-fetch-provider/alternatives-considered:
+  en: 38790419ffbc53fd
+  zh: ea441a243df5e54e
+/agent-note-easytransnote-backed-web-search-and-fetch-provider/consequences:
+  en: 5039c32d0fbb512f
+  zh: d2650a108972fb79

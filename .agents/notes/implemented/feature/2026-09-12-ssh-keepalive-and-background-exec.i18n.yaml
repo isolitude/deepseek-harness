@@ -1,6 +1,22 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-12-ssh-keepalive-and-background-exec.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-12-ssh-keepalive-and-background-exec.md
-2026-09-12-ssh-keepalive-and-background-exec.md: ed6573a1396eaf9e5667ca26e54dc30ad4a3f8d6
-2026-09-12-ssh-keepalive-and-background-exec.zh.md: 7b7b18956930cd71e98a6e44141862f31010513d
+/agent-note-ssh-keepalive-default-and-remote-exec-backgrounding:
+  en: 1c81361e850629b3
+  zh: 18cbf2521d3a2bf2
+/agent-note-ssh-keepalive-default-and-remote-exec-backgrounding/problem:
+  en: c618ccfd9d3b001f
+  zh: 1cd8b878973a89ce
+/agent-note-ssh-keepalive-default-and-remote-exec-backgrounding/decision:
+  en: 211bed23df78599b
+  zh: 2975406de8499434
+/agent-note-ssh-keepalive-default-and-remote-exec-backgrounding/verification:
+  en: b934adfb4489fa54
+  zh: 06a7acfbc407980e
+/agent-note-ssh-keepalive-default-and-remote-exec-backgrounding/alternatives-considered:
+  en: 24fda5682b0c6b8a
+  zh: 256cf12b295827f7
+/agent-note-ssh-keepalive-default-and-remote-exec-backgrounding/consequences:
+  en: a291321814a15aa8
+  zh: 5156da0abbbcec70

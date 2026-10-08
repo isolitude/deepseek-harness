@@ -1,6 +1,61 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/remote/remote-ssh2/README.md
-README.md: 1b6b0d1f286a409eeac4321524f2c2900f89f98b
-README.zh.md: 9521f70ab59ead35a6e0e1d498247f817cbb658f
+/:
+  en: f756312206a952db
+  zh: 9349a4aee28bd07d
+/deepseek-ai-dsh-remote-ssh2:
+  en: e7e08345da95c330
+  zh: 38a4ac8f86c0bb8b
+/deepseek-ai-dsh-remote-ssh2/summary:
+  en: ca0959f0f85405a0
+  zh: 4c527fef929c0812
+/deepseek-ai-dsh-remote-ssh2/table-of-contents:
+  en: b563e4ec4727d0de
+  zh: 44ebe7ceeda3dff6
+/deepseek-ai-dsh-remote-ssh2/use-this-package:
+  en: ad9a356de66d9694
+  zh: 2454ce229686c00f
+/deepseek-ai-dsh-remote-ssh2/use-this-package/mounting-it:
+  en: 2b38966755c73a5b
+  zh: 368ea677f8a65d47
+/deepseek-ai-dsh-remote-ssh2/use-this-package/provider-configuration:
+  en: 3b1de5da71d9aa17
+  zh: 6090b4ccece7c4ad
+/deepseek-ai-dsh-remote-ssh2/use-this-package/authentication:
+  en: e30d51dc43f52fe0
+  zh: 94182649f97fdc77
+/deepseek-ai-dsh-remote-ssh2/use-this-package/host-key-policy:
+  en: c4e1aa4d43aa299f
+  zh: 4890ad4c14ce1991
+/deepseek-ai-dsh-remote-ssh2/understand-the-implementation:
+  en: 42b15ac6321706aa
+  zh: cfcb757213648bd9
+/deepseek-ai-dsh-remote-ssh2/understand-the-implementation/design-philosophy:
+  en: 77d44747b7457ab6
+  zh: 36ac26a5f694f7e0
+/deepseek-ai-dsh-remote-ssh2/understand-the-implementation/source-map:
+  en: f71c3eab5c94480e
+  zh: eee68176bb472e9d
+/deepseek-ai-dsh-remote-ssh2/understand-the-implementation/command-runs:
+  en: 90863b8a6d9c6a1a
+  zh: d4bdbdd9c0c86acf
+/deepseek-ai-dsh-remote-ssh2/understand-the-implementation/transfers:
+  en: 90b87406a087e6cc
+  zh: 62d62f81749d3790
+/deepseek-ai-dsh-remote-ssh2/further-exploration:
+  en: c677de03ced80a67
+  zh: 30cedc70474631f3
+/deepseek-ai-dsh-remote-ssh2/model-experience:
+  en: d364b2916695e186
+  zh: fd1c145c77a19e79
+/deepseek-ai-dsh-remote-ssh2/model-experience/kv-cache-effect:
+  en: aa0d1fc9f4aeb0c8
+  zh: b015a2dc8266f98c
+/deepseek-ai-dsh-remote-ssh2/known-limitations-and-deferred-work:
+  en: 7eb1110420f29f34
+  zh: 82cc21d489d66aa8
+/deepseek-ai-dsh-remote-ssh2/known-limitations-and-deferred-work/dev-note:
+  en: e67f633dc6fe7773
+  zh: 8ec3e73528ddb1a6

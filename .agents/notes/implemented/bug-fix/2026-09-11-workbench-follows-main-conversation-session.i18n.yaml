@@ -1,6 +1,22 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-11-workbench-follows-main-conversation-session.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-11-workbench-follows-main-conversation-session.md
-2026-09-11-workbench-follows-main-conversation-session.md: 934e89328f452b20a79112ab3f8cb5e236dcd1d1
-2026-09-11-workbench-follows-main-conversation-session.zh.md: 20d0da06ae0b94d5b0d31c2c5cd1617aa53a82ab
+/agent-note-workbench-follows-the-main-conversation-session:
+  en: 04173099175538d4
+  zh: 39e83af91a57ebe8
+/agent-note-workbench-follows-the-main-conversation-session/problem:
+  en: 95067d9d92c83625
+  zh: e74a223faaa21efb
+/agent-note-workbench-follows-the-main-conversation-session/decision:
+  en: 6da6870734de0adf
+  zh: a68ed15413a748d1
+/agent-note-workbench-follows-the-main-conversation-session/alternatives-considered:
+  en: 3c3000cb2a3737d3
+  zh: 61c81c93da60677c
+/agent-note-workbench-follows-the-main-conversation-session/consequences:
+  en: a0d339c288a8e0df
+  zh: 3d5dc3ddce8931b0
+/agent-note-workbench-follows-the-main-conversation-session/verification:
+  en: c9cb6ac4c6eacb95
+  zh: 54d5ceee277e27f9
