@@ -103,6 +103,7 @@ export const zh = {
   'panel.error.agent': '无法打开 Agent 会话：',
 } as const
 
+/** Japanese dictionary, checked against the English keys. */
 export const ja = {
   'action.label': 'LLMPWA',
   'panel.title': 'LLMPWA パイプラインワークベンチ',
@@ -151,6 +152,7 @@ export const ja = {
   'panel.error.agent': 'Agent セッションを開けませんでした：',
 } as const
 
+/** Spanish dictionary, checked against the English keys. */
 export const es = {
   'action.label': 'LLMPWA',
   'panel.title': 'Banco de trabajo de canalizaciones LLMPWA',
@@ -199,6 +201,7 @@ export const es = {
   'panel.error.agent': 'No se pudo abrir la sesión del agent:',
 } as const
 
+/** French dictionary, checked against the English keys. */
 export const fr = {
   'action.label': 'LLMPWA',
   'panel.title': 'Atelier de pipelines LLMPWA',
@@ -247,6 +250,7 @@ export const fr = {
   'panel.error.agent': 'Impossible d\'ouvrir la session de l\'agent :',
 } as const
 
+/** German dictionary, checked against the English keys. */
 export const de = {
   'action.label': 'LLMPWA',
   'panel.title': 'LLMPWA-Pipeline-Werkbank',
@@ -295,6 +299,7 @@ export const de = {
   'panel.error.agent': 'Die Agent-Sitzung konnte nicht geöffnet werden:',
 } as const
 
+/** Russian dictionary, checked against the English keys. */
 export const ru = {
   'action.label': 'LLMPWA',
   'panel.title': 'Рабочая среда конвейеров LLMPWA',
@@ -343,6 +348,7 @@ export const ru = {
   'panel.error.agent': 'Не удалось открыть сеанс agent:',
 } as const
 
+/** Portuguese dictionary, checked against the English keys. */
 export const pt = {
   'action.label': 'LLMPWA',
   'panel.title': 'Bancada de pipelines LLMPWA',
