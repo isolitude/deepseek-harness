@@ -81,7 +81,7 @@ interface RemoteRequestBase {
 
 /** One command execution request. */
 export interface RemoteRunRequest extends RemoteRequestBase {
-  /** Shell command; the provider runs `bash -c` in a clean remote environment. */
+  /** Shell command, delivered literally and run through `bash -c` in `cwd`. */
   readonly command: string
   /** Remote working directory; relative paths resolve against the connection remoteRoot. */
   readonly cwd: string
@@ -139,7 +139,8 @@ export interface RemoteRunHandle {
    */
   readonly done: Promise<RemoteRunResult>
   /**
-   * Request the remote command terminate. Settles `done` as killed; idempotent.
+   * Terminate the remote command's process group on the server. Settles `done`
+   * as killed; idempotent.
    * @param reason - optional reason forwarded for diagnostics.
    */
   kill(reason?: string): void

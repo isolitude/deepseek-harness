@@ -112,16 +112,53 @@ describe.skipIf(!ENABLED)('ssh2 provider real-link smoke (built provider)', () =
       // Drive the BUILT provider from a child process so the ssh2 native
       // accelerator runs exactly as in production.
       const script = [
-        "import { mkdir } from 'node:fs/promises'",
+        "import { mkdir, realpath } from 'node:fs/promises'",
+        "import { existsSync } from 'node:fs'",
         "import { Context } from '@deepseek-ai/cordis'",
         "import Ssh2RemoteExecutor from '@deepseek-ai/dsh-remote-ssh2'",
         'const input = JSON.parse(process.argv[2])',
         'const { connection, localScript, pulled } = input',
         'await mkdir(connection.remoteRoot, { recursive: true })',
-        'const executor = new Ssh2RemoteExecutor(new Context(), { connectTimeoutMs: 5_000 })',
+        'const executor = new Ssh2RemoteExecutor(new Context(), { connectTimeoutMs: 5_000, graceMs: 1_000 })',
         'try {',
         "  const run = await executor.run(connection, { command: 'echo hello-remote', cwd: connection.remoteRoot, timeoutMs: 10_000 })",
         "  if (run.exitCode !== 0 || !run.stdout.includes('hello-remote')) throw new Error('exec failed: ' + JSON.stringify(run))",
+        // Working directory: an absolute cwd must be entered, and a relative one
+        // must resolve against remoteRoot. `pwd` reports the physical path, so
+        // compare against realpath on this same host.
+        "  const subDir = connection.remoteRoot + '/sub'",
+        '  await mkdir(subDir, { recursive: true })',
+        '  const realSub = await realpath(subDir)',
+        "  const absolute = await executor.run(connection, { command: 'pwd -P', cwd: subDir, timeoutMs: 10_000 })",
+        "  if (absolute.stdout.trim() !== realSub) throw new Error('absolute cwd not honored: ' + JSON.stringify(absolute))",
+        "  const relative = await executor.run(connection, { command: 'pwd -P', cwd: 'sub', timeoutMs: 10_000 })",
+        "  if (relative.stdout.trim() !== realSub) throw new Error('relative cwd not resolved against remoteRoot: ' + JSON.stringify(relative))",
+        // Cancellation: a grandchild in the session's process group must die with
+        // it, so its delayed marker never appears. A surviving grandchild is the
+        // exact symptom of a stop that only detaches the channel.
+        "  const abortedMarker = connection.remoteRoot + '/aborted-marker'",
+        '  const controller = new AbortController()',
+        "  const pending = executor.run(connection, { command: 'nohup bash -c \\\"sleep 2; touch aborted-marker\\\" >/dev/null 2>&1 & sleep 30', cwd: connection.remoteRoot, timeoutMs: 60_000, signal: controller.signal })",
+        '  setTimeout(() => controller.abort(), 300)',
+        "  let abortCode = ''",
+        '  try { await pending } catch (error) { abortCode = error.code }',
+        "  if (abortCode !== 'REMOTE_ABORTED') throw new Error('abort not reported: ' + abortCode)",
+        '  await new Promise((resolve) => setTimeout(resolve, 3_000))',
+        "  if (existsSync(abortedMarker)) throw new Error('remote command survived abort: grandchild still running')",
+        // A command that ignores SIGTERM exercises the SIGKILL escalation.
+        '  const stubborn = new AbortController()',
+        "  const stubbornRun = executor.run(connection, { command: 'trap \\\"\\\" TERM; nohup bash -c \\\"sleep 2; touch stubborn-marker\\\" >/dev/null 2>&1 & sleep 30', cwd: connection.remoteRoot, timeoutMs: 60_000, signal: stubborn.signal })",
+        '  setTimeout(() => stubborn.abort(), 300)',
+        '  try { await stubbornRun } catch { /* the abort is the expected outcome */ }',
+        '  await new Promise((resolve) => setTimeout(resolve, 3_000))',
+        "  if (existsSync(connection.remoteRoot + '/stubborn-marker')) throw new Error('SIGTERM-ignoring command survived the escalation')",
+        // Detached runs terminate through the handle's kill, not a signal.
+        "  const handle = await executor.start(connection, { command: 'nohup bash -c \\\"sleep 2; touch bg-marker\\\" >/dev/null 2>&1 & sleep 30', cwd: connection.remoteRoot })",
+        '  await new Promise((resolve) => setTimeout(resolve, 300))',
+        '  handle.kill()',
+        '  await handle.done',
+        '  await new Promise((resolve) => setTimeout(resolve, 3_000))',
+        "  if (existsSync(connection.remoteRoot + '/bg-marker')) throw new Error('background command survived kill')",
         "  const written = await executor.writeText(connection, { path: 'data.txt', content: 'line1\\nline2\\n' })",
         "  if (!written.created) throw new Error('write not created')",
         "  const read = await executor.readText(connection, { path: 'data.txt', offset: 1, limit: 10 })",

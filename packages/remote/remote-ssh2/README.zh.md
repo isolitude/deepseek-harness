@@ -45,6 +45,7 @@ kind: "package-reference"
 | `keepaliveCountMax` | `3` | 连续该次数未应答 keepalive 后断开连接 |
 | `maxOutputBytes` | `262144` | 单条命令收集输出的每流上限 |
 | `maxReadBytes` | `16777216` | 单次文本读/写/编辑载荷上限 |
+| `graceMs` | `3000` | 终止 SIGTERM 与升级 SIGKILL 之间的间隔 |
 
 keepalive 默认开启：每条连接每 `keepaliveIntervalMs` 发送一个 SSH 级 keepalive 包，并在连续 `keepaliveCountMax` 个包未应答后断开。这是全局生效的，因此长时会话无需按主机设置即可保持稳定，对应 OpenSSH 的 `ServerAliveInterval` / `ServerAliveCountMax`。设 `keepaliveIntervalMs: 0` 可对每条连接禁用 keepalive。
 
@@ -80,7 +81,11 @@ keepalive 默认开启：每条连接每 `keepaliveIntervalMs` 发送一个 SSH 
 
 ### 命令运行
 
-`run` 经通道启动 `bash -s`，流式读取有界 stdout/stderr，并报告远程退出码、击杀信号与超时真值。非零退出是结果而非失败。
+`run` 把一段脚本写入 `bash -s` 通道，流式读取有界 stdout/stderr，并报告远程退出码、击杀信号与超时真值。非零退出是结果而非失败。
+
+脚本先进入请求的 `cwd`（相对值按 `remoteRoot` 解析）并导出请求的 `env`，然后才执行命令，因此一次运行不会沿用 sshd 的登录目录。命令体放在带引号的 here-document 中，字节保持字面，且不受 `exec` 参数所面临的 SSH 单包大小限制。
+
+取消会真正终止远程命令：超时、`signal` 被中止，或后台句柄的 `kill`，都会向会话进程组发送 SIGTERM，并在 `graceMs` 之后升级为 SIGKILL。信号请求只在通道开启时生效——`ssh2` 在 EOF 后会静默丢弃——因此 stdin 在整个运行期间保持打开，由脚本末尾的 `exit` 在命令结束时收尾。脚本自身忽略 SIGTERM 并把命令作为子进程等待，因此即使命令自己捕获 SIGTERM，也会在升级阶段被杀死。
 
 `start` 启动分离的后台运行：它立即返回一个流式句柄，且不拥有任何期限，因此调用方（`remote_exec` 的 `run_in_background` 路径）可以读取增量 stdout/stderr，并用 `kill` 终止。池化连接在整个后台运行期间保持打开。
 

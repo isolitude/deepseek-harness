@@ -291,6 +291,10 @@ class FakeChannel extends EventEmitter {
   stderr = new EventEmitter()
   written = ''
   killedSignals: string[] = []
+  /** Signals dropped because the channel had already sent EOF (ssh2 semantics). */
+  droppedSignals: string[] = []
+  /** True once this channel sent EOF; ssh2 then refuses signal requests. */
+  eof = false
   destroyed = false
   readonly state: typeof fake.State
 
@@ -301,10 +305,14 @@ class FakeChannel extends EventEmitter {
 
   write(chunk: string): boolean {
     this.written += chunk
+    // The remote shell runs the script as soon as it arrives and exits at its
+    // trailing `exit`, without waiting for stdin EOF.
+    if (this.state.autoSettle) process.nextTick(() => { this.settle() })
     return true
   }
 
   end(): void {
+    this.eof = true
     if (this.state.autoSettle) process.nextTick(() => { this.settle() })
   }
 
@@ -322,6 +330,12 @@ class FakeChannel extends EventEmitter {
   }
 
   signal(name: string): void {
+    // Real ssh2 requires an `open` session channel: after `end()` the request is
+    // silently dropped, never reaching sshd.
+    if (this.eof || this.destroyed) {
+      this.droppedSignals.push(name)
+      return
+    }
     this.killedSignals.push(name)
     if (this.state.killSettles) this.settle()
   }
@@ -407,6 +421,9 @@ beforeEach(async () => {
     connectTimeoutMs: 1_000,
     maxOutputBytes: 256,
     maxReadBytes: 1024,
+    // Short grace keeps the termination paths fast; delivery, not duration, is
+    // what these cases assert.
+    graceMs: 5,
   })
 })
 
@@ -707,7 +724,73 @@ describe('run', () => {
       timeoutMs: 10,
     })
     expect(result.timedOut).toBe(true)
-    expect(channel.killedSignals).toContain('KILL')
+    expect(channel.killedSignals).toContain('TERM')
+  })
+
+  it('runs the command in the requested directory, delivered literally', async () => {
+    const channel = new FakeChannel(fake.State)
+    const client = await acquireClient(executor)
+    client.pendingChannel = channel
+    await executor.run(connection(), {
+      command: 'echo "a \'quoted\' $VAR"',
+      cwd: '/home/phys/workspace/runs',
+      timeoutMs: 10_000,
+    })
+    expect(channel.written).toContain("builtin cd -- '/home/phys/workspace/runs'")
+    expect(channel.written).toContain('echo "a \'quoted\' $VAR"')
+    // The script shell must survive the group SIGTERM so the channel stays open
+    // for the SIGKILL escalation, and it must wait on the command as a child.
+    expect(channel.written).toContain("trap '' TERM")
+    expect(channel.written).toContain('wait "$__dsh_child"')
+    expect(channel.written).toContain("bash -c 'trap - TERM; eval \"$1\"' _ \"$__dsh_command\"")
+    // Exit facts travel through the shell's own status.
+    expect(channel.written).toContain('exit "$__dsh_status"')
+  })
+
+  it('resolves a relative cwd against the connection remoteRoot', async () => {
+    const channel = new FakeChannel(fake.State)
+    const client = await acquireClient(executor)
+    client.pendingChannel = channel
+    await executor.run(connection(), { command: 'pwd', cwd: 'runs/a', timeoutMs: 10_000 })
+    expect(channel.written).toContain("builtin cd -- '/home/phys/workspace/runs/a'")
+  })
+
+  it('keeps stdin open so termination signals still reach sshd', async () => {
+    const channel = new FakeChannel(fake.State)
+    const client = await acquireClient(executor)
+    client.pendingChannel = channel
+    fake.State.killSettles = false
+    fake.State.autoSettle = false
+    await executor.run(connection(), { command: 'sleep 60', cwd: '/home/phys/workspace', timeoutMs: 10 })
+    expect(channel.eof).toBe(false)
+    expect(channel.droppedSignals).toEqual([])
+  })
+
+  it('rejects an environment name that cannot be exported', async () => {
+    const channel = new FakeChannel(fake.State)
+    const client = await acquireClient(executor)
+    client.pendingChannel = channel
+    await expect(executor.run(connection(), {
+      command: 'echo hi',
+      cwd: '/home/phys/workspace',
+      timeoutMs: 10_000,
+      env: { 'BAD NAME': 'x' },
+    })).rejects.toMatchObject({ code: 'REMOTE_IO_ERROR' })
+    expect(channel.written).toBe('')
+  })
+
+  it('exports explicit environment entries ahead of the command', async () => {
+    const channel = new FakeChannel(fake.State)
+    const client = await acquireClient(executor)
+    client.pendingChannel = channel
+    await executor.run(connection(), {
+      command: 'echo "$A"',
+      cwd: '/home/phys/workspace',
+      timeoutMs: 10_000,
+      env: { A: "v'al", _B: 'plain' },
+    })
+    expect(channel.written).toContain('export A=\'v\'\\\'\'al\'')
+    expect(channel.written).toContain("export _B='plain'")
   })
 
   it('aborts immediately when the caller signal is already aborted', async () => {
@@ -820,8 +903,32 @@ describe('start (detached streaming)', () => {
     const handle = await executor.start(connection(), { command: 'sleep 60', cwd: '/home/phys/workspace' })
     handle.kill()
     const result = await handle.done
-    expect(channel.killedSignals).toContain('KILL')
+    // The first attempt is SIGTERM, which is enough here because the fake
+    // settles on any delivered signal.
+    expect(channel.killedSignals).toEqual(['TERM'])
     expect(result.signal).toBe('SIGKILL')
+  })
+
+  it('escalates to SIGKILL when the command outlives the SIGTERM grace', async () => {
+    const executorWithGrace = new Ssh2RemoteExecutor(new Context(), {
+      idleTimeoutMs: 60_000,
+      connectTimeoutMs: 1_000,
+      maxOutputBytes: 256,
+      maxReadBytes: 1024,
+      graceMs: 5,
+    })
+    fake.State.killSettles = false
+    fake.State.autoSettle = false
+    fake.State.channelSignal = 'SIGKILL'
+    fake.State.channelExitCode = null
+    const channel = new FakeChannel(fake.State)
+    const client = await acquireClient(executorWithGrace)
+    client.pendingChannel = channel
+    const handle = await executorWithGrace.start(connection(), { command: 'sleep 60', cwd: '/home/phys/workspace' })
+    handle.kill()
+    await handle.done
+    // SIGTERM alone leaves it running, so the grace expiry escalates and closes.
+    expect(channel.killedSignals).toEqual(['TERM', 'KILL'])
   })
 
   it('does not apply a foreground deadline; a deadliner is absent', async () => {

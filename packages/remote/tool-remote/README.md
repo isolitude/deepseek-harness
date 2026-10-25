@@ -64,7 +64,7 @@ The tool resolves `keyPath` relative to the analysis directory; `passwordRef` na
 
 | Tool | Arguments | Behavior |
 |---|---|---|
-| `remote_exec` | `command`, `workdir?`, `timeout_ms?`, `run_in_background?` | Runs one remote shell command and waits for it; returns `{ exit_code, signal, stdout, stderr, timed_out }`. With `run_in_background: true` it registers a background job and returns `{ kind, job_id }` immediately. |
+| `remote_exec` | `command`, `workdir?`, `timeout_ms?`, `run_in_background?` | Runs one remote shell command in `workdir` and waits for it; returns `{ exit_code, signal, stdout, stderr, timed_out }`. With `run_in_background: true` it registers a background job and returns `{ kind, job_id }` immediately. |
 | `remote_read` | `path`, `offset?`, `limit?` | Line-numbered remote text window with totals and truncation truth |
 | `remote_write` | `path`, `content` | Atomic create/replace of a remote UTF-8 text file |
 | `remote_edit` | `path`, `old_string`, `new_string`, `replace_all?` | One literal replacement, requiring a unique match unless `replace_all` |
@@ -91,6 +91,8 @@ By default `remote_exec` runs a command to completion and returns only when the 
 ```
 
 The call returns a job id right away. Read the streamed output with `job_output` and stop the job with `job_kill`; both are provided by the job controls (`dsh-tool-jobs`). The remote run owns its lifetime, so the pooled SSH connection stays open for the whole background duration.
+
+Stopping a run kills it on the remote server rather than only detaching the client: the executor sends SIGTERM to the remote process group and escalates to SIGKILL after the provider's `graceMs`. This applies to a foreground `remote_exec` whose turn is interrupted, to a `timeout_ms` expiry, and to `job_kill` on a background run.
 
 Without a composed job registry the tool stays foreground-only and omits the `run_in_background` parameter. If you cannot hang a long command on the turn and the registry is unavailable, fall back to detaching it on the remote shell and polling a log file:
 

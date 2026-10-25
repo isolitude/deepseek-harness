@@ -64,7 +64,7 @@ remote:
 
 | 工具 | 参数 | 行为 |
 |---|---|---|
-| `remote_exec` | `command`、`workdir?`、`timeout_ms?`、`run_in_background?` | 运行一条远程 shell 命令并等待其结束；返回 `{ exit_code, signal, stdout, stderr, timed_out }`。用 `run_in_background: true` 时注册一个后台任务，并立即返回 `{ kind, job_id }`。 |
+| `remote_exec` | `command`、`workdir?`、`timeout_ms?`、`run_in_background?` | 在 `workdir` 中运行一条远程 shell 命令并等待其结束；返回 `{ exit_code, signal, stdout, stderr, timed_out }`。用 `run_in_background: true` 时注册一个后台任务，并立即返回 `{ kind, job_id }`。 |
 | `remote_read` | `path`、`offset?`、`limit?` | 带行号的远程文本窗口、总数与截断真值 |
 | `remote_write` | `path`、`content` | 原子创建/替换远程 UTF-8 文本文件 |
 | `remote_edit` | `path`、`old_string`、`new_string`、`replace_all?` | 一次字面量替换；除非 `replace_all`，否则要求唯一匹配 |
@@ -91,6 +91,8 @@ remote:
 ```
 
 该调用立即返回任务 id。用 `job_output` 读取流式输出、用 `job_kill` 停止任务；两者由任务控制项（`dsh-tool-jobs`）提供。远程运行自己掌握生命周期，因此在整个后台运行期间连接池的 SSH 连接保持打开。
+
+停止一次运行会在远程服务器上真正杀死它，而不仅是摘掉客户端：执行器向远程进程组发送 SIGTERM，并在 provider 的 `graceMs` 之后升级为 SIGKILL。这适用于被中断轮次的前台 `remote_exec`、`timeout_ms` 到期，以及对后台运行执行 `job_kill`。
 
 当没有组合任务注册表时，工具保持仅前台，并省略 `run_in_background` 参数。如果你无法在轮次上挂起长命令、且注册表不可用，则可以退回到远程 shell 分离并轮询日志文件：
 

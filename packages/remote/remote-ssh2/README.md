@@ -45,6 +45,7 @@ All keys are optional; the defaults are sensible for interactive use.
 | `keepaliveCountMax` | `3` | Drop the connection after this many consecutive unanswered keepalives |
 | `maxOutputBytes` | `262144` | Per-stream cap for one command's collected output |
 | `maxReadBytes` | `16777216` | Cap for one text read/write/edit payload |
+| `graceMs` | `3000` | Delay between the terminating SIGTERM and the SIGKILL escalation |
 
 Keepalive is on by default: every connection sends an SSH-level keepalive packet every `keepaliveIntervalMs` and drops the connection after `keepaliveCountMax` consecutive unanswered packets. This is global, so long-running sessions stay stable without per-host setup, mirroring OpenSSH's `ServerAliveInterval` / `ServerAliveCountMax`. Set `keepaliveIntervalMs: 0` to disable keepalive for every connection.
 
@@ -80,7 +81,11 @@ Strict by default: a connection must carry the expected SHA256 fingerprint of th
 
 ### Command runs
 
-`run` spawns `bash -s` over the channel, streams bounded stdout/stderr, and reports the remote exit code, killing signal, and timeout truth. A non-zero exit is a result, not a failure.
+`run` writes a script into a `bash -s` channel, streams bounded stdout/stderr, and reports the remote exit code, killing signal, and timeout truth. A non-zero exit is a result, not a failure.
+
+The script enters the request's `cwd` (a relative value resolves against `remoteRoot`) and exports the request's `env` before running the command, so a run never inherits the sshd login directory. The command body travels in a quoted here-document, which keeps every byte literal and lets a command exceed the SSH packet-size limit an `exec` argument would hit.
+
+Cancellation terminates the remote command: a timeout, an aborted `signal`, or a background handle's `kill` sends SIGTERM to the session's process group, then SIGKILL after `graceMs`. Delivery requires an open channel — `ssh2` drops signal requests after EOF — so stdin stays open for the whole run and the script's trailing `exit` ends the shell when the command finishes. The script shell runs the command as a child and ignores SIGTERM itself, so a command that traps SIGTERM still dies at the escalation.
 
 `start` launches a detached background run: it returns a streaming handle immediately and owns no deadline, so a caller (the `remote_exec` `run_in_background` path) can read incremental stdout/stderr and terminate it with `kill`. The pooled connection stays open for the whole background lifetime.
 

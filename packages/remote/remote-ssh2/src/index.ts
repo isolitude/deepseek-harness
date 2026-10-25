@@ -13,6 +13,7 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { readFile, rename as localRename, stat as localStat } from 'node:fs/promises'
 import { createReadStream, createWriteStream } from 'node:fs'
+import { posix } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { Client, SFTPWrapper } from 'ssh2'
@@ -58,6 +59,8 @@ export interface Config {
   maxOutputBytes?: number
   /** Cap for one text read/write/edit payload. Default 16 MiB. */
   maxReadBytes?: number
+  /** Grace between the terminating SIGTERM and the SIGKILL escalation. Default 3s. */
+  graceMs?: number
 }
 
 export const Config: z<Config> = z.object({
@@ -67,6 +70,7 @@ export const Config: z<Config> = z.object({
   keepaliveCountMax: z.number().default(3),
   maxOutputBytes: z.number().default(256 * 1024),
   maxReadBytes: z.number().default(16 * 1024 * 1024),
+  graceMs: z.number().default(3_000),
 })
 
 /** One pooled SSH client plus its liveness state. */
@@ -341,7 +345,14 @@ function abortError(connection: RemoteConnection): RemoteError {
 /** A never-settling placeholder so an absent signal cannot short-circuit a race. */
 const NEVER: Promise<never> = new Promise<never>(() => {})
 
-/** A rejection-shaped cancel when the caller owns a signal. */
+/**
+ * A rejection-shaped cancel when the caller owns a signal. Termination is not
+ * this promise's job: `run` owns it in its `finally`, which runs on the abort
+ * path too, so the remote command is stopped before the rejection surfaces.
+ * @param signal - the caller's abort signal, when present.
+ * @param connection - the connection named in the rejection message.
+ * @returns the rejection, or a never-settling placeholder without a signal.
+ */
 function abortPromise(signal: AbortSignal | undefined, connection: RemoteConnection): Promise<never> {
   if (signal === undefined) return NEVER
   return new Promise<never>((_, reject) => {
@@ -350,6 +361,111 @@ function abortPromise(signal: AbortSignal | undefined, connection: RemoteConnect
     if (signal.aborted) abort()
     else signal.addEventListener('abort', abort, { once: true })
   })
+}
+
+/** Render a POSIX single-quoted shell word: literal, with `'` escaped as `'\''`. */
+function shellQuote(text: string): string {
+  return `'${text.split("'").join("'\\''")}'`
+}
+
+/**
+ * Resolve the absolute remote directory a command runs in. A relative request
+ * resolves against the connection's `remoteRoot`, matching
+ * {@link resolveRemotePath}; an absolute one is used as given, because a
+ * command may deliberately run outside the tree its files live in.
+ * @param connection - the connection supplying `remoteRoot`.
+ * @param cwd - the request's working directory, absolute or root-relative.
+ * @returns the normalized absolute remote directory.
+ */
+function resolveCwd(connection: RemoteConnection, cwd: string): string {
+  return posix.normalize(cwd.startsWith('/') ? cwd : `${connection.remoteRoot}/${cwd}`)
+}
+
+/** Environment variable names a shell can `export` directly. */
+const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/
+
+/** Render the `export` lines for a run's explicit environment entries.
+ * @param env - the request's environment entries, when any.
+ * @returns one shell line per entry, in iteration order.
+ */
+function envLines(env: Readonly<Record<string, string>> | undefined): string[] {
+  if (env === undefined) return []
+  return Object.entries(env).map(([name, value]) => {
+    if (!ENV_NAME.test(name)) {
+      throw new RemoteError(`remote environment name '${name}' is not a shell identifier`, 'REMOTE_IO_ERROR')
+    }
+    return `export ${name}=${shellQuote(value)}`
+  })
+}
+
+/**
+ * Build the program written to a `bash -s` channel. The command travels inside
+ * a quoted here-document, so no byte of it is re-parsed by the outer shell, and
+ * it runs through `bash -c` in the requested directory with stdin closed.
+ *
+ * The reading shell then ignores SIGTERM and waits on the command as a child.
+ * sshd addresses a signal request to the session's process group, so this shell
+ * receives the terminating SIGTERM as well: ignoring it keeps the channel open
+ * for the SIGKILL escalation, and running the command as a child means one that
+ * traps SIGTERM itself still dies at that escalation. The trailing `exit` ends
+ * the shell as soon as the command finishes, because the sender keeps stdin
+ * open (signals are dropped after EOF) and the shell must not wait for EOF.
+ * @param connection - the connection supplying `remoteRoot`.
+ * @param request - the run whose `cwd`, `env`, and `command` shape the script.
+ * @returns the complete script text for the channel stdin.
+ */
+function runScript(connection: RemoteConnection, request: RemoteRunRequest): string {
+  const delimiter = `DSH_${randomUUID().replaceAll('-', '')}`
+  const cwd = shellQuote(resolveCwd(connection, request.cwd))
+  return [
+    ...envLines(request.env),
+    `__dsh_command=$(command cat <<'${delimiter}'`,
+    request.command,
+    delimiter,
+    ')',
+    `builtin cd -- ${cwd} || { printf 'dsh-remote: cannot enter %s\\n' ${cwd} >&2; exit 1; }`,
+    "trap '' TERM",
+    'bash -c \'trap - TERM; eval "$1"\' _ "$__dsh_command" < /dev/null &',
+    '__dsh_child=$!',
+    'wait "$__dsh_child"',
+    '__dsh_status=$?',
+    'exit "$__dsh_status"',
+    '',
+  ].join('\n')
+}
+
+/**
+ * Terminate the remote command and settle its channel. A signal request only
+ * reaches the wire while the channel is open (`ssh2` silently drops it after
+ * EOF), so delivery must precede any `end()`/`close()`. sshd maps a signal
+ * request to `killpg` of the session's process group, which covers the script
+ * shell and the command it waits on. The script shell ignores SIGTERM, so the
+ * escalation to SIGKILL is what ends the group.
+ * @param channel - the live run channel.
+ * @param closing - the channel's monotonic close marker.
+ * @param graceMs - delay between SIGTERM and the SIGKILL escalation.
+ * @returns a promise resolving once the channel closed.
+ */
+async function terminateChannel(
+  channel: import('ssh2').ClientChannel,
+  closing: { isClosed: () => boolean; wait: () => Promise<void> },
+  graceMs: number,
+): Promise<void> {
+  if (closing.isClosed()) return
+  channel.signal('TERM')
+  let timer: NodeJS.Timeout | undefined
+  const graceElapsed = new Promise<boolean>((resolve) => {
+    timer = setTimeout(() => { resolve(true) }, graceMs)
+    timer.unref()
+    void closing.wait().then(() => { resolve(false) })
+  })
+  const escalate = await graceElapsed
+  if (timer !== undefined) clearTimeout(timer)
+  if (!escalate) return
+  if (closing.isClosed()) return
+  channel.signal('KILL')
+  channel.close()
+  await closing.wait()
 }
 
 /** One bounded text stream collector. */
@@ -675,6 +791,7 @@ export class Ssh2RemoteExecutor extends RemoteExecutor {
       keepaliveCountMax: config.keepaliveCountMax ?? 3,
       maxOutputBytes: config.maxOutputBytes ?? 256 * 1024,
       maxReadBytes: config.maxReadBytes ?? 16 * 1024 * 1024,
+      graceMs: config.graceMs ?? 3_000,
     }
     /* v8 ignore next 3 -- fiber-disposal teardown is exercised by composition lifecycle tests. */
     ctx.effect(() => {
@@ -777,13 +894,16 @@ export class Ssh2RemoteExecutor extends RemoteExecutor {
       // completed command; normalize it to the `null` the result contract declares.
       signal = sig ?? null
     })
-    channel.write(`${request.command}\n`)
-    channel.end()
+    // Stdin stays open after the write: `ssh2` only sends a signal request while
+    // the channel is still `open`, so closing here would make every later
+    // termination a silent no-op. The script's trailing `exit` ends the shell.
+    channel.write(runScript(connection, request))
     const deadline = new Promise<never>(() => {
       const timer = setTimeout(() => {
         timedOut = true
-        channel.signal('KILL')
-        channel.close()
+        // Termination runs on the side: the channel's `close` settles the race,
+        // and the SIGTERM→SIGKILL grace must not extend the deadline itself.
+        void terminateChannel(channel, closing, this.opts.graceMs)
       }, timeoutMs)
       // The timer is cleared on the settle path below.
       channel.on('close', () => { clearTimeout(timer) })
@@ -795,8 +915,9 @@ export class Ssh2RemoteExecutor extends RemoteExecutor {
         abortPromise(request.signal, connection),
       ])
     } finally {
-      // Abort or deadline may still hold the channel open; force-close it.
-      if (!closing.isClosed()) channel.close()
+      // An abort leaves the command running; terminate it before the channel
+      // goes away, because a signal request needs an open channel to reach sshd.
+      if (!closing.isClosed()) await terminateChannel(channel, closing, this.opts.graceMs)
       await closing.wait()
       this.release(pooled)
     }
@@ -824,8 +945,9 @@ export class Ssh2RemoteExecutor extends RemoteExecutor {
       exitCode = code
       signal = sig ?? null
     })
-    channel.write(`${request.command}\n`)
-    channel.end()
+    // Stdin stays open for the same reason as `run`: `kill` must be able to
+    // send a signal request, which ssh2 drops once the channel reaches EOF.
+    channel.write(runScript(connection, request))
     // Detached: no deadline timer. The caller owns termination via `kill`, and
     // holds the pooled client open until the channel closes, so the connection
     // stays alive for the whole background lifetime.
@@ -848,12 +970,9 @@ export class Ssh2RemoteExecutor extends RemoteExecutor {
       stderr,
       done,
       kill: () => {
-        // A kill before exit sends SIGKILL then force-closes the channel; the
-        // `close` event releases the pooled client and settles `done`.
-        if (!closing.isClosed()) {
-          channel.signal('KILL')
-          channel.close()
-        }
+        // Termination is asynchronous (SIGTERM, grace, SIGKILL); the channel's
+        // `close` releases the pooled client and settles `done`.
+        void terminateChannel(channel, closing, this.opts.graceMs)
       },
     }
   }
