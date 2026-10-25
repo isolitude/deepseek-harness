@@ -11,8 +11,10 @@
   transition: filter 120ms ease;
 }
 
-.node:hover {
-  filter: brightness(0.97);
+@media (hover: hover) {
+  .node:hover {
+    filter: brightness(0.97);
+  }
 }
 
 .dot {

@@ -31,9 +31,13 @@ describe('ReferenceDocument', () => {
     )
     const img = container.querySelector('img')
     expect(img).toBeTruthy()
-    expect(img?.getAttribute('src')).toBe(
-      'http://localhost:3000/api/file?path=%2Fhome%2Fuser%2Fws%2FLLMPWA%2Fanalyses%2Fkk_dis%2Ftask%2Ft1%2F3_%E6%8A%A5%E5%91%8A%2Ffig1_all_paths.png',
+    // MarkdownText tags the file-route URL with its per-render load number so a
+    // rewritten image never reuses the earlier bytes from the browser cache.
+    const src = img?.getAttribute('src') ?? ''
+    expect(src).toContain(
+      'path=%2Fhome%2Fuser%2Fws%2FLLMPWA%2Fanalyses%2Fkk_dis%2Ftask%2Ft1%2F3_%E6%8A%A5%E5%91%8A%2Ffig1_all_paths.png',
     )
+    expect(src).toMatch(/&load=\d+$/)
   })
 
   it('renders HTML files as a live sandboxed document, not highlighted code', () => {

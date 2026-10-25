@@ -31,8 +31,10 @@
   cursor: pointer;
 }
 
-.close:hover {
-  background: var(--dsw-alias-bg-overlay, #f3f4f6);
+@media (hover: hover) {
+  .close:hover {
+    background: var(--dsw-alias-bg-overlay, #f3f4f6);
+  }
 }
 
 .headerActions {
@@ -51,8 +53,10 @@
   font-weight: 600;
 }
 
-.openAgent:hover:not(:disabled) {
-  background: var(--dsw-alias-bg-base, #f9fafb);
+@media (hover: hover) {
+  .openAgent:hover:not(:disabled) {
+    background: var(--dsw-alias-bg-base, #f9fafb);
+  }
 }
 
 .openAgent:disabled {
@@ -94,8 +98,10 @@
   cursor: pointer;
 }
 
-.refresh:hover {
-  background: var(--dsw-alias-bg-overlay, #f3f4f6);
+@media (hover: hover) {
+  .refresh:hover {
+    background: var(--dsw-alias-bg-overlay, #f3f4f6);
+  }
 }
 
 .list {
@@ -125,8 +131,10 @@
   cursor: pointer;
 }
 
-.analysis:hover {
-  background: var(--dsw-alias-bg-overlay, #f3f4f6);
+@media (hover: hover) {
+  .analysis:hover {
+    background: var(--dsw-alias-bg-overlay, #f3f4f6);
+  }
 }
 
 .analysis[data-selected='true'] {
@@ -179,8 +187,10 @@
   border-bottom-color: var(--dsw-alias-label-primary, #111827);
 }
 
-.tab:hover {
-  color: var(--dsw-alias-label-primary, #111827);
+@media (hover: hover) {
+  .tab:hover {
+    color: var(--dsw-alias-label-primary, #111827);
+  }
 }
 
 .previewBody {
@@ -232,7 +242,12 @@
   touch-action: none;
 }
 
-.drawerResize:hover,
+@media (hover: hover) {
+  .drawerResize:hover {
+    background: var(--dsw-alias-bg-overlay, #f3f4f6);
+  }
+}
+
 .drawerResize:active {
   background: var(--dsw-alias-bg-overlay, #f3f4f6);
 }
@@ -256,8 +271,10 @@
   padding: 8px 0;
 }
 
-.drawerStrip:hover {
-  background: var(--dsw-alias-bg-base, #f9fafb);
+@media (hover: hover) {
+  .drawerStrip:hover {
+    background: var(--dsw-alias-bg-base, #f9fafb);
+  }
 }
 
 .drawerHeader {
@@ -291,8 +308,10 @@
   font-size: 12px;
 }
 
-.newSession:hover {
-  background: var(--dsw-alias-bg-overlay, #f3f4f6);
+@media (hover: hover) {
+  .newSession:hover {
+    background: var(--dsw-alias-bg-overlay, #f3f4f6);
+  }
 }
 
 .drawerBody {
@@ -385,8 +404,10 @@
   font-size: 12px;
 }
 
-.refButton:hover {
-  background: var(--dsw-alias-bg-overlay, #f3f4f6);
+@media (hover: hover) {
+  .refButton:hover {
+    background: var(--dsw-alias-bg-overlay, #f3f4f6);
+  }
 }
 
 .refButton[data-selected='true'] {
@@ -480,9 +501,11 @@
   font-size: 12px;
 }
 
-.taskCard:hover {
-  border-color: var(--dsw-alias-border-inverted, #9ca3af);
-  background: var(--dsw-alias-bg-overlay, #f3f4f6);
+@media (hover: hover) {
+  .taskCard:hover {
+    border-color: var(--dsw-alias-border-inverted, #9ca3af);
+    background: var(--dsw-alias-bg-overlay, #f3f4f6);
+  }
 }
 
 .taskCardTitle {
@@ -548,7 +571,12 @@
   touch-action: none;
 }
 
-.taskResize:hover,
+@media (hover: hover) {
+  .taskResize:hover {
+    background: var(--dsw-alias-bg-overlay, #f3f4f6);
+  }
+}
+
 .taskResize:active {
   background: var(--dsw-alias-bg-overlay, #f3f4f6);
 }
@@ -569,8 +597,10 @@
   font-size: 13px;
 }
 
-.taskStrip:hover {
-  background: var(--dsw-alias-bg-base, #f9fafb);
+@media (hover: hover) {
+  .taskStrip:hover {
+    background: var(--dsw-alias-bg-base, #f9fafb);
+  }
 }
 
 .taskPopupHeader {
@@ -644,8 +674,10 @@
   text-align: left;
 }
 
-.treeDir:hover {
-  background: var(--dsw-alias-bg-overlay, #f3f4f6);
+@media (hover: hover) {
+  .treeDir:hover {
+    background: var(--dsw-alias-bg-overlay, #f3f4f6);
+  }
 }
 
 .treeTwist {
@@ -669,8 +701,10 @@
   white-space: nowrap;
 }
 
-.treeFile:hover {
-  background: var(--dsw-alias-bg-overlay, #f3f4f6);
+@media (hover: hover) {
+  .treeFile:hover {
+    background: var(--dsw-alias-bg-overlay, #f3f4f6);
+  }
 }
 
 .treeFile[data-selected='true'] {

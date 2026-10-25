@@ -13,7 +13,7 @@ import { apply, inject } from '../src/client/index.ts'
 import { apply as hostApply } from '../src/index.ts'
 import { FooterButton } from '../src/client/FooterButton.tsx'
 import { Workbench } from '../src/client/Workbench.tsx'
-import { en, zh } from '../src/client/locales.ts'
+import { de, en, es, fr, ja, pt, ru, zh } from '../src/client/locales.ts'
 
 interface Recorded {
   name: string
@@ -69,7 +69,7 @@ describe('ui-llmpwa-pipeline apply', () => {
 
   it('registers the dictionaries and both workbench surfaces with a shared store and face', async () => {
     const { registered, dictionaries } = await boot()
-    expect(dictionaries.get('llmpwa')).toEqual({ zh, en })
+    expect(dictionaries.get('llmpwa')).toEqual({ zh, en, ja, es, fr, de, ru, pt })
     expect(registered.map(entry => [entry.name, entry.id, entry.locale, entry.component])).toEqual([
       ['sidebar.footer.action', 'llmpwa-workbench', 'llmpwa', FooterButton],
       ['shell.overlay', 'llmpwa-workbench', 'llmpwa', Workbench],

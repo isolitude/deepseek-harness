@@ -26,7 +26,7 @@ import { FooterButton } from './FooterButton.tsx'
 import { Workbench } from './Workbench.tsx'
 import { workbenchFace } from './face.ts'
 import { createWorkbenchStore } from './store.ts'
-import { en, zh } from './locales.ts'
+import { de, en, es, fr, ja, pt, ru, zh } from './locales.ts'
 
 /** This package's copy namespace. */
 const NS = 'llmpwa'
@@ -55,7 +55,7 @@ export const inject = ['slots', 'locale', 'sessions', 'workspaces', 'uiWorkspace
  * @param ctx - client root context carrying the slots registry, copy, sessions, and the Remote face.
  */
 export function apply(ctx: ClientContext): void {
-  ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-llmpwa-pipeline: dictionaries')
+  ctx.effect(() => ctx.locale.register(NS, { zh, en, ja, es, fr, de, ru, pt }), 'ui-llmpwa-pipeline: dictionaries')
 
   const store = createWorkbenchStore()
   const face = workbenchFace(ctx.remote, ctx.sessions, ctx.workspaces, ctx.uiWorkspace)
