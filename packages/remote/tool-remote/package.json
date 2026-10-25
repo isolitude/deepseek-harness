@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-tool-remote",
   "description": "Model-facing remote SSH tools (remote_exec, remote_read, remote_write, remote_edit, remote_push, remote_pull) for DeepSeek Harness",
-  "version": "0.1.3-alpha.2",
+  "version": "0.2.1-rc.3",
   "publishConfig": {
     "access": "public"
   },

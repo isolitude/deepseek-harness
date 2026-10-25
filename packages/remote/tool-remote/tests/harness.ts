@@ -294,21 +294,22 @@ export async function buildHarness(): Promise<Harness> {
   return { ctx, calls, dir, analysisDir, call }
 }
 
-/** Direct registry dispatch with a synthesized agent session cwd. */
-function dispatch(
+/** Direct registry dispatch of one call, with a synthesized agent session cwd. */
+async function dispatch(
   ctx: Context,
   name: string,
   args: unknown,
   cwd: string,
 ): Promise<ToolExecutionResult> {
-  return ctx.tools.execute({
+  const batch = await ctx.tools.execute({
+    calls: [{ type: 'tool-call', id: `call-${++callCounter}` as never, name, arguments: JSON.stringify(args) }],
     signal: new AbortController().signal,
-    callId: `call-${++callCounter}` as never,
-    name,
-    arguments: args,
     // An empty cwd renders a workspace-less session header (cwd omitted).
     agent: { session: { header: cwd === '' ? {} : { cwd } } } as never,
   })
+  const outcome = batch.results[0]
+  if (outcome === undefined) throw new Error('executor omitted the dispatched result')
+  return outcome.result
 }
 
 export async function writeAnalysisConfig(analysisDir: string, body: string): Promise<void> {

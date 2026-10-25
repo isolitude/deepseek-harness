@@ -16,7 +16,7 @@ import type { JobId } from '@deepseek-ai/dsh-jobs'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import type { ToolExecutionResult } from '@deepseek-ai/dsh-tools'
 import { isJsonValue } from '@deepseek-ai/dsh-util-values'
-import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
+import { mountAgentLoopTestDependencies, unsupportedModel } from '@deepseek-ai/dsh-agent-loop-testkit'
 import LocalJobRegistry from '@deepseek-ai/dsh-jobs-local'
 import * as ToolJobs from '@deepseek-ai/dsh-tool-jobs'
 import * as ToolSsh from '@deepseek-ai/dsh-tool-remote'
@@ -84,14 +84,27 @@ async function setup(): Promise<{ ctx: Context; calls: FakeCalls; analysisDir: s
   return { ctx, calls, analysisDir, owner: session }
 }
 
-function call(ctx: Context, analysisDir: string, name: string, args: Record<string, unknown>, signal?: AbortSignal) {
-  return ctx.tools.execute({
+/** Dispatch one remote_exec call through the executor and unwrap its result. */
+async function call(
+  ctx: Context,
+  analysisDir: string,
+  name: string,
+  args: Record<string, unknown>,
+  signal?: AbortSignal,
+): Promise<ToolExecutionResult> {
+  const batch = await ctx.tools.execute({
+    calls: [{
+      type: 'tool-call',
+      id: ToolCallId(`remote-bg-${Math.random()}`),
+      name,
+      arguments: JSON.stringify(args),
+    }],
     signal: signal ?? new AbortController().signal,
-    callId: ToolCallId(`remote-bg-${Math.random()}`),
-    name,
-    arguments: args,
     agent: { id: 'session-kk_test', session: { header: { cwd: analysisDir } } } as never,
   })
+  const outcome = batch.results[0]
+  if (outcome === undefined) throw new Error('executor omitted the dispatched result')
+  return outcome.result
 }
 
 /** A minimal live Agent published into the registry for the owner gate. */
@@ -104,6 +117,7 @@ function stubAgent(id: string): Agent {
     session,
     inbox: { nextTurn: [], nextStep: [] } as never,
     status: 'idle',
+    model: unsupportedModel(),
     ctx,
     send: () => {},
     followup: () => {},

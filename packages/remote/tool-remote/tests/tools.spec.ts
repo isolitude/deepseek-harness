@@ -120,21 +120,25 @@ describe('remote_exec', () => {
 
   it('rejects execution without an agent session', async () => {
     await withConfig()
-    const result = await (harness.ctx.tools as unknown as {
-      execute(input: { callId: string; name: string; arguments: unknown; signal: AbortSignal }): Promise<unknown>
+    const batch = await (harness.ctx.tools as unknown as {
+      execute(input: {
+        calls: { type: 'tool-call'; id: string; name: string; arguments: string }[]
+        signal: AbortSignal
+      }): Promise<{ results: { result: { isError: boolean } }[] }>
     }).execute({
-      callId: 'no-agent',
-      name: 'remote_exec',
-      arguments: { command: 'ls' },
+      calls: [{ type: 'tool-call', id: 'no-agent', name: 'remote_exec', arguments: JSON.stringify({ command: 'ls' }) }],
       signal: new AbortController().signal,
     })
-    expect((result as { isError: boolean }).isError).toBe(true)
+    expect(batch.results[0]?.result.isError).toBe(true)
   })
 
   it('rejects agent-less execution for every tool', async () => {
     await withConfig()
     const registry = harness.ctx.tools as unknown as {
-      execute(input: { callId: string; name: string; arguments: unknown; signal: AbortSignal }): Promise<{ isError: boolean }>
+      execute(input: {
+        calls: { type: 'tool-call'; id: string; name: string; arguments: string }[]
+        signal: AbortSignal
+      }): Promise<{ results: { result: { isError: boolean } }[] }>
     }
     const cases: Array<[string, Record<string, unknown>]> = [
       ['remote_read', { path: 'a' }],
@@ -144,13 +148,11 @@ describe('remote_exec', () => {
       ['remote_pull', { remote_path: 'a', local_path: 'b' }],
     ]
     for (const [name, args] of cases) {
-      const result = await registry.execute({
-        callId: `no-agent-${name}`,
-        name,
-        arguments: args,
+      const batch = await registry.execute({
+        calls: [{ type: 'tool-call', id: `no-agent-${name}`, name, arguments: JSON.stringify(args) }],
         signal: new AbortController().signal,
       })
-      expect(result.isError, name).toBe(true)
+      expect(batch.results[0]?.result.isError, name).toBe(true)
     }
   })
 

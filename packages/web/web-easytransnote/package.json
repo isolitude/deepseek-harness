@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-web-easytransnote",
   "description": "easytransnote-backed web search and fetch providers (ctx.web) for the DeepSeek Harness",
-  "version": "0.1.7-alpha.2",
+  "version": "0.2.1-rc.3",
   "publishConfig": {
     "access": "public"
   },
