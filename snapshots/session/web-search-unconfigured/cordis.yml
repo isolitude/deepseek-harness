@@ -1,5 +1,13 @@
 # Live-recording patch: the search key reference names no credential, so the
 # model request withholds web_search while the rest of the tool surface stays.
+# Pin the search provider to the legacy Messages search the scenario records;
+# the base default is now the DeepSeek Search API, which would supply the tool.
+- id: web
+  name: '@deepseek-ai/dsh-web'
+  config:
+    searchProvider: deepseek-official
+    fetchProvider: http
+
 - id: web-search-deepseek
   name: '@deepseek-ai/dsh-web-search-deepseek'
   config:
